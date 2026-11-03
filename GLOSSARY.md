@@ -58,6 +58,14 @@ _Avoid_: Match, relevant, in scope
 A text message telling a person about Hackathons that newly fit them, newly became Travel-funded, or have a Deadline reminder due.
 _Avoid_: Notification, ping, digest
 
+**Welcome Alert**:
+The first Alert a person receives, listing what already Fits them when tracking starts; afterwards Alerts only cover what is new.
+_Avoid_: Intro message, first digest
+
+**Announced**:
+A Hackathon is Announced once an Alert has told the person about it; it is never announced again.
+_Avoid_: Notified, sent, seen
+
 **Deadline reminder**:
 The part of an Alert that warns, a few days ahead, that an open Hackathon that Fits closes its applications.
 _Avoid_: Calendar reminder, deadline ping
