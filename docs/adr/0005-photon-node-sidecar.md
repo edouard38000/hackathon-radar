@@ -1,0 +1,3 @@
+# Photon Alerts go through a small Node sidecar, an exception to Rust first
+
+Photon, the hosted iMessage API we use as the main Alert channel, only ships a TypeScript SDK (`spectrum-ts`), so the CLI sends Photon Alerts through a minimal bundled Node sidecar instead of calling it from Rust. Everything else stays in Rust, and the no-signup fallback channel, ntfy, is a plain HTTP call from the CLI. Photon's free tier sends from Photon's own number, which is what makes an Alert notify (iMessages from your own Apple ID to yourself don't). The person must text their Photon line once before it can message them.

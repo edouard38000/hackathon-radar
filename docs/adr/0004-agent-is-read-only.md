@@ -1,0 +1,3 @@
+# The agent can only search and read; the CLI does all writing
+
+The headless agent runs with `--permission-mode dontAsk` and `--allowedTools WebSearch,WebFetch`: no shell, no file writes, nothing else. It returns its judgements as JSON matching a schema the CLI provides (`--json-schema`), and the CLI validates and stores them. Every Run is capped with `--max-budget-usd` (default $0.50). The personal version let the agent write the Google Sheet and calendar directly; we don't, because strangers will run this unattended every week on their own machines, and an agent that reads arbitrary web pages must not be able to act on anything it reads there. Never use `bypassPermissions` or `--dangerously-skip-permissions`.

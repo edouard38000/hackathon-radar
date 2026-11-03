@@ -55,5 +55,31 @@ A Hackathon fits a Profile when it passes all of the Profile's rules.
 _Avoid_: Match, relevant, in scope
 
 **Alert**:
-A text message telling a person about Hackathons that newly fit them or newly became Travel-funded.
+A text message telling a person about Hackathons that newly fit them, newly became Travel-funded, or have a Deadline reminder due.
 _Avoid_: Notification, ping, digest
+
+**Deadline reminder**:
+The part of an Alert that warns, a few days ahead, that an open Hackathon that Fits closes its applications.
+_Avoid_: Calendar reminder, deadline ping
+
+**Fare**:
+The cheapest return flight price from Home to a Hackathon's nearest airport for its dates.
+_Avoid_: Price, ticket cost, flight cost
+
+**Unverified fare**:
+A Fare estimated from web search rather than looked up from flight prices.
+_Avoid_: Guess, rough fare
+
+## How tracking works
+
+**Run**:
+One scheduled pass that collects Candidates, decides which Hackathons Fit, and sends at most one Alert.
+_Avoid_: Job, scan, sync, refresh
+
+**Source**:
+A place hackathon listings are collected from, such as a calendar feed or a listings site.
+_Avoid_: Feed, provider, scraper
+
+**Candidate**:
+A listing collected from a Source that has passed the rules checkable from data alone, but not yet been confirmed as a Hackathon that Fits.
+_Avoid_: Lead, raw event, result
