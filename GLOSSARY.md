@@ -5,7 +5,7 @@ A self-hosted tool that finds hackathons a person can realistically attend, trac
 ## The person and their rules
 
 **Profile**:
-One person's settings that decide which hackathons are for them: Home, Countries, Train limit, Flight budget, the Travel-funded rule, Themes, Eligibility and Alert channel.
+One person's settings that decide which hackathons are for them and how they hear about them: Home, Countries, Train limit, Flight budget, the Travel-funded rule, Themes, Eligibility, Alert channel and Agent.
 _Avoid_: Preferences, settings, config, account
 
 **Home**:
@@ -39,6 +39,10 @@ _Avoid_: Requirements, restrictions
 **Alert channel**:
 Where a person receives Alerts.
 _Avoid_: Notifier, messaging, notification method
+
+**Agent**:
+The person's own coding agent, such as Claude Code or Codex, which sets them up and judges Candidates on each Run.
+_Avoid_: Model, LLM, bot, AI
 
 ## Hackathons and fit
 

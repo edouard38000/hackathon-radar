@@ -1,0 +1,3 @@
+# Coding agents are the front door
+
+The main way to start using hackathon-radar is to open the repo in your own coding agent (Claude Code, Codex or another) and ask to be set up. A setup skill in the repo has the agent interview the person for their Profile, install the binary, walk them through Photon and SerpApi, and run `hackathon-radar init` and `doctor` for them. `init` stays the single source of setup logic for people without a coding agent; the skill only drives it, so there's one setup to maintain. We chose this because the people who want this tool already live in coding agents, and it lets setup run on the subscription they already have.

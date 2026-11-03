@@ -4,5 +4,6 @@ hackathon-radar is open source and runs entirely on each person's own machine: t
 
 ## Consequences
 
-- Each person brings their own agent subscription or API key and their own messaging line (Photon), so setup has to be guided.
+- Each person brings their own coding agent (Claude Code, Codex or another), normally on the subscription they already pay for, with an API key only as a fallback, plus their own messaging line (Photon). So there's no per-Run cost beyond what they already have, but setup has to be guided.
+- Setup is done by the person's own coding agent: they open the repo in it and ask to be set up (see ADR 0007).
 - The README states the tool is for personal use only, because it reads public hackathon listings whose terms differ by source.
