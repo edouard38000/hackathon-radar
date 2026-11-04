@@ -1,0 +1,3 @@
+# Worldwide from v1, with regional Source packs
+
+hackathon-radar works for anyone, anywhere, not just Europe where the personal version started. Global Sources (Devpost, MLH, ETHGlobal, dev.events, web search) apply to everyone. Regional Source packs add local ones: Europe gets hackathon.be, hackathonhub.eu and European Luma calendars; North America gets MLH North America and city Luma calendars such as San Francisco, New York and Boston. Setup picks the pack from the person's Home, and they can add more. The Profile carries a currency for Flight budget and Fares, and Countries can name regions (for example "United States" or "Schengen"). The Train limit stays a Profile rule everywhere; where trains are rare, most trips simply count as flights.

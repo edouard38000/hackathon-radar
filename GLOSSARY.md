@@ -13,15 +13,15 @@ The city a person travels from, with the airports they fly out of.
 _Avoid_: Location, origin, base
 
 **Countries**:
-The countries a person will travel to at their own cost, as long as the trip also passes the Train limit or Flight budget.
-_Avoid_: Allowlist, regions, scope
+The countries or regions (such as "United States" or "Schengen") a person will travel to at their own cost, as long as the trip also passes the Train limit or Flight budget.
+_Avoid_: Allowlist, scope
 
 **Train limit**:
 The longest train journey from Home, in hours, that still counts as going by train; anything longer counts as a flight.
 _Avoid_: 4-hour rule, max train time
 
 **Flight budget**:
-The most a person will pay for a return flight from Home to attend a hackathon.
+The most a person will pay for a return flight from Home to attend a hackathon, in their own currency.
 _Avoid_: Fare cap, price limit, €200 rule
 
 **Travel-funded rule**:
@@ -91,6 +91,14 @@ _Avoid_: Job, scan, sync, refresh
 **Source**:
 A place hackathon listings are collected from, such as a calendar feed or a listings site.
 _Avoid_: Feed, provider, scraper
+
+**Source pack**:
+A set of Sources for one part of the world, such as Europe or North America, chosen from a person's Home; global Sources apply to everyone.
+_Avoid_: Region, bundle, feed list
+
+**Duplicate listing**:
+Two listings, usually from different Sources, that describe the same Hackathon; they are merged into one Hackathon.
+_Avoid_: Duplicate event, semantic duplicate
 
 **Candidate**:
 A listing collected from a Source that has passed the rules checkable from data alone, but not yet been confirmed as a Hackathon that Fits.
