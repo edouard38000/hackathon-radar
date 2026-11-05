@@ -13,5 +13,6 @@ pub mod paths;
 pub mod profile;
 pub mod rules;
 pub mod run;
+pub mod scheduler;
 pub mod sources;
 pub mod store;

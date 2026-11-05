@@ -1,0 +1,9 @@
+[Unit]
+Description=hackathon-radar Run
+Documentation=https://github.com/edouard38000/hackathon-radar
+
+[Service]
+Type=oneshot
+ExecStart="/opt/hackathon radar/bin/hackathon-radar" run --profile "/home/ada/Radar & <Co>/profile.toml" --db "/home/ada/100%% $$data/radar.sqlite"
+StandardOutput=append:/home/ada/logs/100%% radar.log
+StandardError=append:/home/ada/logs/100%% radar.log

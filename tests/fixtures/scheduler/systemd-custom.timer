@@ -1,0 +1,10 @@
+[Unit]
+Description=Scheduled hackathon-radar Runs (every Wednesday and Sunday at 21:45)
+
+[Timer]
+OnCalendar=Wed,Sun *-*-* 21:45:00
+Persistent=true
+Unit=hackathon-radar.service
+
+[Install]
+WantedBy=timers.target

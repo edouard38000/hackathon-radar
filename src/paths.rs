@@ -16,7 +16,39 @@ pub fn default_database_path() -> anyhow::Result<PathBuf> {
     database_path_from(&|key| std::env::var_os(key))
 }
 
+/// `$XDG_STATE_HOME/hackathon-radar/run.log`, else under `~/.local/state`: where scheduled Runs log.
+pub fn default_log_path() -> anyhow::Result<PathBuf> {
+    log_path_from(&|key| std::env::var_os(key))
+}
+
+/// `~/Library/LaunchAgents`, where launchd looks for a person's own agents on macOS.
+pub fn launch_agents_dir() -> anyhow::Result<PathBuf> {
+    launch_agents_dir_from(&|key| std::env::var_os(key))
+}
+
+/// `$XDG_CONFIG_HOME/systemd/user`, else `~/.config/systemd/user`: systemd user units on Linux.
+pub fn systemd_user_dir() -> anyhow::Result<PathBuf> {
+    systemd_user_dir_from(&|key| std::env::var_os(key))
+}
+
 type Env<'a> = &'a dyn Fn(&str) -> Option<OsString>;
+
+fn log_path_from(env: Env<'_>) -> anyhow::Result<PathBuf> {
+    Ok(base_dir(env, "XDG_STATE_HOME", ".local/state")?
+        .join(APP_DIR)
+        .join("run.log"))
+}
+
+fn launch_agents_dir_from(env: Env<'_>) -> anyhow::Result<PathBuf> {
+    let home = env("HOME")
+        .filter(|h| !h.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("HOME is not set"))?;
+    Ok(PathBuf::from(home).join("Library/LaunchAgents"))
+}
+
+fn systemd_user_dir_from(env: Env<'_>) -> anyhow::Result<PathBuf> {
+    Ok(base_dir(env, "XDG_CONFIG_HOME", ".config")?.join("systemd/user"))
+}
 
 fn profile_path_from(env: Env<'_>) -> anyhow::Result<PathBuf> {
     Ok(base_dir(env, "XDG_CONFIG_HOME", ".config")?
@@ -86,5 +118,40 @@ mod tests {
     #[test]
     fn no_home_is_an_error() {
         assert!(profile_path_from(&env(&[])).is_err());
+        assert!(launch_agents_dir_from(&env(&[])).is_err());
+    }
+
+    #[test]
+    fn schedule_locations_under_home() {
+        let env = env(&[("HOME", "/home/ada")]);
+        assert_eq!(
+            log_path_from(&env).unwrap(),
+            PathBuf::from("/home/ada/.local/state/hackathon-radar/run.log")
+        );
+        assert_eq!(
+            launch_agents_dir_from(&env).unwrap(),
+            PathBuf::from("/home/ada/Library/LaunchAgents")
+        );
+        assert_eq!(
+            systemd_user_dir_from(&env).unwrap(),
+            PathBuf::from("/home/ada/.config/systemd/user")
+        );
+    }
+
+    #[test]
+    fn schedule_locations_honour_xdg_dirs() {
+        let env = env(&[
+            ("HOME", "/home/ada"),
+            ("XDG_STATE_HOME", "/state"),
+            ("XDG_CONFIG_HOME", "/cfg"),
+        ]);
+        assert_eq!(
+            log_path_from(&env).unwrap(),
+            PathBuf::from("/state/hackathon-radar/run.log")
+        );
+        assert_eq!(
+            systemd_user_dir_from(&env).unwrap(),
+            PathBuf::from("/cfg/systemd/user")
+        );
     }
 }

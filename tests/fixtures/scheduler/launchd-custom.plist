@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>io.github.edouard38000.hackathon-radar</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/hackathon radar/bin/hackathon-radar</string>
+		<string>run</string>
+		<string>--profile</string>
+		<string>/home/ada/Radar &amp; &lt;Co&gt;/profile.toml</string>
+		<string>--db</string>
+		<string>/home/ada/100% $data/radar.sqlite</string>
+	</array>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict>
+			<key>Weekday</key>
+			<integer>3</integer>
+			<key>Hour</key>
+			<integer>21</integer>
+			<key>Minute</key>
+			<integer>45</integer>
+		</dict>
+		<dict>
+			<key>Weekday</key>
+			<integer>0</integer>
+			<key>Hour</key>
+			<integer>21</integer>
+			<key>Minute</key>
+			<integer>45</integer>
+		</dict>
+	</array>
+	<key>StandardOutPath</key>
+	<string>/home/ada/logs/100% radar.log</string>
+	<key>StandardErrorPath</key>
+	<string>/home/ada/logs/100% radar.log</string>
+</dict>
+</plist>
