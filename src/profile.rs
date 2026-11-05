@@ -80,6 +80,9 @@ pub struct AgentSettings {
     /// Opts in to an experimental adapter (Codex); without it, the Profile refuses one.
     #[serde(default)]
     pub experimental: bool,
+    /// The most Agent steps the travel estimates request may use (ADR 0004).
+    #[serde(default = "default_travel_max_turns")]
+    pub travel_max_turns: u32,
 }
 
 /// The Agents hackathon-radar can run.
@@ -113,6 +116,14 @@ fn default_max_turns() -> u32 {
     DEFAULT_MAX_TURNS
 }
 
+/// Enough to estimate a Run's batch of destination cities, most of which need
+/// no more than a search.
+pub const DEFAULT_TRAVEL_MAX_TURNS: u32 = 15;
+
+fn default_travel_max_turns() -> u32 {
+    DEFAULT_TRAVEL_MAX_TURNS
+}
+
 impl Default for AgentSettings {
     fn default() -> Self {
         Self {
@@ -120,6 +131,7 @@ impl Default for AgentSettings {
             max_turns: DEFAULT_MAX_TURNS,
             command: None,
             experimental: false,
+            travel_max_turns: DEFAULT_TRAVEL_MAX_TURNS,
         }
     }
 }
@@ -289,6 +301,10 @@ impl Profile {
                  {:?}; remove agent.command or set adapter = \"command\"",
                 other.as_str()
             )),
+        }
+        if file.agent.travel_max_turns == 0 {
+            problems
+                .push("agent.travel_max_turns is 0; the Agent needs at least one step".to_owned());
         }
         let travel = TravelSettings::from_file(file.travel, &mut problems);
 
@@ -504,6 +520,7 @@ mod tests {
                     max_turns: DEFAULT_MAX_TURNS,
                     command: None,
                     experimental: false,
+                    travel_max_turns: DEFAULT_TRAVEL_MAX_TURNS,
                 },
                 travel: TravelSettings::default(),
             }
@@ -574,6 +591,7 @@ mod tests {
             [agent]
             adapter = "claude-code"
             max_turns = 12
+            travel_max_turns = 6
             "#,
         )
         .unwrap();
@@ -592,6 +610,7 @@ mod tests {
                 max_turns: 12,
                 command: None,
                 experimental: false,
+                travel_max_turns: 6,
             }
         );
     }
@@ -693,6 +712,28 @@ mod tests {
         assert!(err.to_string().contains("command"), "{err}");
         let err = parse(&format!("{base}[agent]\nmax_turns = 0\n")).unwrap_err();
         assert!(err.to_string().contains("agent.max_turns is 0"), "{err}");
+    }
+
+    #[test]
+    fn the_travel_step_cap_defaults_to_15_and_cannot_be_zero() {
+        let base = "countries = [\"Belgium\"]\n[home]\ncity = \"Lyon\"\nairports = [\"LYS\"]\n";
+        let profile = parse(base).unwrap();
+        assert_eq!(profile.agent.travel_max_turns, 15);
+        assert_eq!(DEFAULT_TRAVEL_MAX_TURNS, 15);
+        let set = parse(&format!("{base}[agent]\ntravel_max_turns = 4\n")).unwrap();
+        assert_eq!(set.agent.travel_max_turns, 4);
+        assert_eq!(set.agent.max_turns, DEFAULT_MAX_TURNS);
+        let err = parse(&format!("{base}[agent]\ntravel_max_turns = 0\n")).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("agent.travel_max_turns is 0; the Agent needs at least one step"),
+            "{err}"
+        );
+        let negative = parse(&format!("{base}[agent]\ntravel_max_turns = -3\n")).unwrap_err();
+        assert!(
+            matches!(negative, ProfileError::Syntax { .. }),
+            "{negative}"
+        );
     }
 
     #[test]

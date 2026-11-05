@@ -322,8 +322,10 @@ mod tests {
             .replace("# [[travel.overrides]]", "[[travel.overrides]]")
             .replace("# city = ", "city = ")
             .replace("# train_hours = ", "train_hours = ")
-            .replace("# airport = ", "airport = ");
+            .replace("# airport = ", "airport = ")
+            .replace("# travel_max_turns = ", "travel_max_turns = ");
         let profile = Profile::from_toml(&uncommented, &path).unwrap();
+        assert_eq!(profile.agent.travel_max_turns, 15);
         assert_eq!(profile.home.country.as_deref(), Some("Belgium"));
         assert_eq!(profile.travel.train_limit_minutes, 240);
         assert_eq!(

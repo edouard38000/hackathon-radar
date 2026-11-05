@@ -49,6 +49,9 @@ nationalities = ["Belgian"]
 [agent]
 adapter = "claude-code"
 max_turns = 50
+# The most steps the Agent may take estimating train times and airports for
+# new cities, a separate, smaller request. Optional: 15 by default.
+# travel_max_turns = 15
 
 # To use Codex instead, replace the adapter line above with the two lines below.
 # It runs `codex exec` in a read-only sandbox with live web search, on your own

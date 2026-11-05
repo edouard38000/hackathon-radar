@@ -123,6 +123,17 @@ pub struct JudgeRequest<'a> {
     /// The full prompt, with the Eligibility facts and Candidates filled in.
     pub prompt: String,
     pub schema: &'static str,
+    /// This request's own step cap, for adapters that take one; `None` uses the
+    /// adapter's, which is the Profile's `agent.max_turns`.
+    pub step_cap: Option<StepCap>,
+}
+
+/// A step cap that a request carries instead of the adapter's own (ADR 0004).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StepCap {
+    pub max_turns: u32,
+    /// The Profile setting it comes from, named when the Agent runs out of steps.
+    pub setting: &'static str,
 }
 
 /// A Candidate as sent, with the id the Agent must answer with.
@@ -149,6 +160,7 @@ impl<'a> JudgeRequest<'a> {
             eligibility: &profile.eligibility,
             prompt,
             schema: SCHEMA,
+            step_cap: None,
         }
     }
 

@@ -15,7 +15,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-use super::JudgeRequest;
+use super::{JudgeRequest, StepCap};
 use crate::profile::Profile;
 
 /// The instructions for travel estimates. `{{home}}` and `{{destinations}}`
@@ -69,13 +69,19 @@ impl<'a> TravelRequest<'a> {
         }
     }
 
-    /// The request as every Agent takes it: this prompt and schema, and no Candidates.
+    /// The request as every Agent takes it: this prompt and schema, no
+    /// Candidates, and the Profile's `agent.travel_max_turns` as its step cap,
+    /// so a Run's two requests stay bounded (ADR 0004).
     pub fn agent_request(&self) -> JudgeRequest<'a> {
         JudgeRequest {
             candidates: Vec::new(),
             eligibility: &self.profile.eligibility,
             prompt: self.prompt.clone(),
             schema: TRAVEL_SCHEMA,
+            step_cap: Some(StepCap {
+                max_turns: self.profile.agent.travel_max_turns,
+                setting: "agent.travel_max_turns",
+            }),
         }
     }
 
@@ -260,6 +266,13 @@ mod tests {
 
         let agent_request = request.agent_request();
         assert!(agent_request.candidates.is_empty());
+        assert_eq!(
+            agent_request.step_cap,
+            Some(StepCap {
+                max_turns: crate::profile::DEFAULT_TRAVEL_MAX_TURNS,
+                setting: "agent.travel_max_turns",
+            })
+        );
         assert_eq!(agent_request.schema, TRAVEL_SCHEMA);
         assert_eq!(agent_request.prompt, request.prompt);
     }

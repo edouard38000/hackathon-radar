@@ -10,7 +10,7 @@ use anyhow::Context;
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::{Agent, JudgeRequest, exit, tail};
+use super::{Agent, JudgeRequest, StepCap, exit, tail};
 use crate::process::{Command, Output, ProcessRunner};
 
 pub const PROGRAM: &str = "claude";
@@ -48,6 +48,11 @@ impl<R: ProcessRunner> ClaudeCode<R> {
     /// - `--setting-sources ""` loads no user, project or local settings, so the
     ///   person's own allow rules and hooks don't apply. Their sign-in still does.
     pub fn args(&self, schema: &str) -> Vec<String> {
+        self.args_with_cap(schema, self.max_turns)
+    }
+
+    /// [`Self::args`] with a request's own step cap, such as the travel request's.
+    pub fn args_with_cap(&self, schema: &str, max_turns: u32) -> Vec<String> {
         [
             "-p",
             "--permission-mode",
@@ -60,7 +65,7 @@ impl<R: ProcessRunner> ClaudeCode<R> {
             "--setting-sources",
             "",
             "--max-turns",
-            &self.max_turns.to_string(),
+            &max_turns.to_string(),
             "--output-format",
             "json",
             "--json-schema",
@@ -73,6 +78,18 @@ impl<R: ProcessRunner> ClaudeCode<R> {
     /// Reads the answer out of `claude -p --output-format json`'s result: its
     /// `structured_output`, or else its `result` text.
     pub fn answer(&self, output: &Output) -> anyhow::Result<String> {
+        self.answer_with_cap(output, self.cap())
+    }
+
+    /// The adapter's own step cap, the Profile's `agent.max_turns`.
+    fn cap(&self) -> StepCap {
+        StepCap {
+            max_turns: self.max_turns,
+            setting: "agent.max_turns",
+        }
+    }
+
+    fn answer_with_cap(&self, output: &Output, cap: StepCap) -> anyhow::Result<String> {
         let result: Option<ResultMessage> = serde_json::from_str(output.stdout.trim()).ok();
         let Some(result) = result else {
             anyhow::bail!(
@@ -83,9 +100,10 @@ impl<R: ProcessRunner> ClaudeCode<R> {
         };
         if result.subtype.as_deref() == Some("error_max_turns") {
             anyhow::bail!(
-                "Claude Code used all {} steps before answering; raise agent.max_turns in your Profile \
+                "Claude Code used all {} steps before answering; raise {} in your Profile \
                  if this keeps happening",
-                self.max_turns
+                cap.max_turns,
+                cap.setting
             );
         }
         if result.is_error || !output.success() || result.subtype.as_deref() != Some("success") {
@@ -120,14 +138,15 @@ impl<R: ProcessRunner> Agent for ClaudeCode<R> {
     fn judge(&self, request: &JudgeRequest<'_>) -> anyhow::Result<String> {
         // An empty working directory, so no project's files or settings are in reach.
         let dir = tempfile::tempdir().context("creating a working directory for Claude Code")?;
+        let cap = request.step_cap.unwrap_or_else(|| self.cap());
         let output = self.runner.run(&Command {
             program: PROGRAM.to_owned(),
-            args: self.args(request.schema),
+            args: self.args_with_cap(request.schema, cap.max_turns),
             stdin: request.prompt.clone(),
             working_dir: Some(dir.path().to_owned()),
             timeout: self.timeout,
         })?;
-        self.answer(&output)
+        self.answer_with_cap(&output, cap)
     }
 }
 
