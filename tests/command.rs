@@ -249,6 +249,11 @@ fn the_profile_selects_the_command_adapter() {
         "command:my-agent"
     );
     assert_eq!(
+        agent::from_settings(&profile.agent).warning(),
+        None,
+        "the command adapter needs no experimental opt-in"
+    );
+    assert_eq!(
         agent::from_settings(&AgentSettings::default()).name(),
         "claude-code",
         "Claude Code stays the default"

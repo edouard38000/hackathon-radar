@@ -8,13 +8,13 @@
 mod support;
 
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use hackathon_radar::agent::codex::{self, Codex};
 use hackathon_radar::agent::{self, Agent, JudgeRequest, Judgement, SCHEMA, TravelFunded};
 use hackathon_radar::candidate::Candidate;
 use hackathon_radar::process::{Command, Output, ProcessRunner};
-use hackathon_radar::profile::{AgentAdapter, AgentSettings};
+use hackathon_radar::profile::{AgentAdapter, AgentSettings, Profile};
 use support::*;
 
 /// Records each command, and what its schema file and working directory held
@@ -261,12 +261,55 @@ fn the_persons_config_rules_and_shell_are_shut_out() {
 }
 
 #[test]
-fn the_profile_selects_codex() {
+fn the_profile_selects_codex_only_with_the_experimental_opt_in() {
+    let text = |agent: &str| {
+        format!(
+            "countries = [\"Belgium\"]\n[home]\ncity = \"Brussels\"\nairports = [\"BRU\"]\n[agent]\n{agent}"
+        )
+    };
+    let refused = Profile::from_toml(&text("adapter = \"codex\"\n"), Path::new("p.toml"))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        refused.contains("read-only lockdown is unverified against a real Codex CLI"),
+        "{refused}"
+    );
+
+    let profile = Profile::from_toml(
+        &text("adapter = \"codex\"\nexperimental = true\n"),
+        Path::new("p.toml"),
+    )
+    .unwrap();
+    assert_eq!(profile.agent.adapter, AgentAdapter::Codex);
+    assert_eq!(agent::from_settings(&profile.agent).name(), "codex");
+}
+
+#[test]
+fn every_run_with_codex_carries_a_one_line_warning() {
     let settings = AgentSettings {
         adapter: AgentAdapter::Codex,
+        experimental: true,
         ..AgentSettings::default()
     };
-    assert_eq!(agent::from_settings(&settings).name(), "codex");
+    let warning = agent::from_settings(&settings)
+        .warning()
+        .expect("Codex warns")
+        .to_owned();
+    assert_eq!(warning, codex::WARNING);
+    assert!(!warning.contains('\n'), "one line: {warning:?}");
+    assert!(warning.contains("experimental"), "{warning}");
+    assert!(
+        warning.contains("unverified against a real Codex CLI"),
+        "{warning}"
+    );
+    let runner = FakeRunner::printing("", 0);
+    assert_eq!(Codex::new(&runner).warning(), Some(codex::WARNING));
+
+    // The other adapters print none.
+    assert_eq!(
+        agent::from_settings(&AgentSettings::default()).warning(),
+        None
+    );
 }
 
 #[test]

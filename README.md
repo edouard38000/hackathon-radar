@@ -49,13 +49,23 @@ claude -p --permission-mode dontAsk --tools WebSearch,WebFetch --allowedTools We
 
 It loads none of your Claude Code settings, hooks or MCP servers, so nothing you've allowed for your own work applies to it. The step cap is `agent.max_turns` in your Profile (50 by default).
 
-**Codex** (`adapter = "codex"`) runs headless on your own `codex` login (or `CODEX_API_KEY`, if you set it). If `codex` isn't signed in, run `codex login` once yourself.
+**Codex** (`adapter = "codex"`, experimental) runs headless on your own `codex` login (or `CODEX_API_KEY`, if you set it). If `codex` isn't signed in, run `codex login` once yourself.
 
 ```sh
 codex exec --sandbox read-only --skip-git-repo-check --ephemeral --ignore-user-config --ignore-rules -c approval_policy="never" -c web_search="live" -c features.shell_tool=false -c features.view_image=false --output-schema <schema file> --json -
 ```
 
 The sandbox is read-only and nothing is ever approved; the shell and local-image tools are turned off, so live web search (which also opens pages) is all it has. It loads none of your `config.toml` (so none of your MCP servers or sandbox settings) and none of your execpolicy rules, and keeps no session files. Codex has no step cap of its own, so `agent.max_turns` doesn't apply to it; the 30-minute limit does.
+
+**The Codex adapter is experimental.** Its read-only lockdown comes from OpenAI's documentation and is unverified against a real Codex CLI: if Codex ignored one of these settings, it could keep a shell that reads your whole disk while it reads arbitrary web pages. So it only runs when you opt in knowingly, and every Run that uses it prints a warning:
+
+```toml
+[agent]
+adapter = "codex"
+experimental = true
+```
+
+Without `experimental = true`, the Profile is refused; use `adapter = "claude-code"` instead. The opt-in stays until a recorded Codex run confirms the flags.
 
 **Any other coding agent** (`adapter = "command"`) runs from a command template in your Profile:
 

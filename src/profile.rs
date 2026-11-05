@@ -68,6 +68,9 @@ pub struct AgentSettings {
     /// The command template for `adapter = "command"`; set only with that adapter.
     #[serde(default)]
     pub command: Option<CommandTemplate>,
+    /// Opts in to an experimental adapter (Codex); without it, the Profile refuses one.
+    #[serde(default)]
+    pub experimental: bool,
 }
 
 /// The Agents hackathon-radar can run.
@@ -107,6 +110,7 @@ impl Default for AgentSettings {
             adapter: AgentAdapter::default(),
             max_turns: DEFAULT_MAX_TURNS,
             command: None,
+            experimental: false,
         }
     }
 }
@@ -245,6 +249,14 @@ impl Profile {
 
         if file.agent.max_turns == 0 {
             problems.push("agent.max_turns is 0; the Agent needs at least one step".to_owned());
+        }
+        if file.agent.adapter == AgentAdapter::Codex && !file.agent.experimental {
+            problems.push(
+                "agent.adapter = \"codex\" is experimental: the Codex adapter's read-only lockdown \
+                 is unverified against a real Codex CLI. Add experimental = true under [agent] to \
+                 opt in knowingly, or use adapter = \"claude-code\""
+                    .to_owned(),
+            );
         }
         match (file.agent.adapter, &file.agent.command) {
             (AgentAdapter::Command, None) => problems.push(
@@ -465,6 +477,7 @@ mod tests {
                     adapter: AgentAdapter::ClaudeCode,
                     max_turns: DEFAULT_MAX_TURNS,
                     command: None,
+                    experimental: false,
                 },
             }
         );
@@ -551,6 +564,7 @@ mod tests {
                 adapter: AgentAdapter::ClaudeCode,
                 max_turns: 12,
                 command: None,
+                experimental: false,
             }
         );
     }
@@ -558,8 +572,12 @@ mod tests {
     #[test]
     fn the_agent_setting_selects_codex_or_a_command() {
         let base = "countries = [\"Belgium\"]\n[home]\ncity = \"Lyon\"\nairports = [\"LYS\"]\n";
-        let codex = parse(&format!("{base}[agent]\nadapter = \"codex\"\n")).unwrap();
+        let codex = parse(&format!(
+            "{base}[agent]\nadapter = \"codex\"\nexperimental = true\n"
+        ))
+        .unwrap();
         assert_eq!(codex.agent.adapter, AgentAdapter::Codex);
+        assert!(codex.agent.experimental);
         assert_eq!(codex.agent.command, None);
 
         let command = parse(&format!(
@@ -569,6 +587,31 @@ mod tests {
         assert_eq!(command.agent.adapter, AgentAdapter::Command);
         let template = command.agent.command.expect("a command template");
         assert_eq!(template.program(), "my-agent");
+    }
+
+    #[test]
+    fn codex_is_refused_unless_the_profile_opts_in_to_experimental_adapters() {
+        let base = "countries = [\"Belgium\"]\n[home]\ncity = \"Lyon\"\nairports = [\"LYS\"]\n";
+        for agent in [
+            "adapter = \"codex\"\n",
+            "adapter = \"codex\"\nexperimental = false\n",
+        ] {
+            let err = parse(&format!("{base}[agent]\n{agent}")).unwrap_err();
+            let message = err.to_string();
+            assert!(matches!(err, ProfileError::Invalid { .. }), "{message}");
+            assert!(
+                message.contains("agent.adapter = \"codex\" is experimental"),
+                "{message}"
+            );
+            assert!(
+                message.contains("unverified against a real Codex CLI"),
+                "{message}"
+            );
+            assert!(message.contains("experimental = true"), "{message}");
+            assert!(message.contains("adapter = \"claude-code\""), "{message}");
+        }
+        // Claude Code, the default, needs no opt-in.
+        assert!(!parse(base).unwrap().agent.experimental);
     }
 
     #[test]
@@ -603,7 +646,7 @@ mod tests {
         );
 
         let stray = parse(&format!(
-            "{base}[agent]\nadapter = \"codex\"\ncommand = [\"my-agent\"]\n"
+            "{base}[agent]\nadapter = \"codex\"\nexperimental = true\ncommand = [\"my-agent\"]\n"
         ))
         .unwrap_err();
         assert!(
@@ -728,9 +771,12 @@ mod tests {
         // And so are its commented-out Codex and command adapters, each in place
         // of Claude Code.
         let without_claude = text.replace("adapter = \"claude-code\"\n", "");
-        let uncommented = without_claude.replace("# adapter = \"codex\"", "adapter = \"codex\"");
+        let uncommented = without_claude
+            .replace("# adapter = \"codex\"", "adapter = \"codex\"")
+            .replace("# experimental = true", "experimental = true");
         let profile = Profile::from_toml(&uncommented, &path).unwrap();
         assert_eq!(profile.agent.adapter, AgentAdapter::Codex);
+        assert!(profile.agent.experimental);
         let uncommented = without_claude
             .replace("# adapter = \"command\"", "adapter = \"command\"")
             .replace("# command = ", "command = ");

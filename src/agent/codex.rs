@@ -7,6 +7,10 @@
 //!
 //! Codex has no step cap of its own, so `agent.max_turns` doesn't apply to it;
 //! the time limit does.
+//!
+//! Experimental: the read-only lockdown below comes from OpenAI's docs and is
+//! unverified against a real Codex CLI, so a Profile must opt in with
+//! `experimental = true`, and every Run prints [`WARNING`].
 
 use std::path::Path;
 use std::time::Duration;
@@ -20,6 +24,10 @@ pub const PROGRAM: &str = "codex";
 
 /// How long one request may take before the Agent is stopped.
 pub const DEFAULT_TIMEOUT: Duration = super::DEFAULT_TIMEOUT;
+
+/// Printed on every Run that uses Codex, until a recorded run confirms its flags.
+pub const WARNING: &str = "the Codex adapter is experimental: its read-only lockdown is \
+     unverified against a real Codex CLI (you opted in with agent.experimental = true)";
 
 const SIGN_IN_HINT: &str = "If Codex isn't signed in, run `codex login` once yourself with your \
      own account, or set CODEX_API_KEY.";
@@ -128,6 +136,10 @@ impl<R: ProcessRunner> Codex<R> {
 impl<R: ProcessRunner> Agent for Codex<R> {
     fn name(&self) -> &str {
         "codex"
+    }
+
+    fn warning(&self) -> Option<&str> {
+        Some(WARNING)
     }
 
     fn judge(&self, request: &JudgeRequest<'_>) -> anyhow::Result<String> {

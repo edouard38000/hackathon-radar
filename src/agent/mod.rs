@@ -45,6 +45,12 @@ pub trait Agent {
     /// which should be JSON matching [`SCHEMA`]. An error means the Agent failed,
     /// ran out of steps or time, or gave no answer at all.
     fn judge(&self, request: &JudgeRequest<'_>) -> anyhow::Result<String>;
+
+    /// A one-line warning to print on every Run that uses this Agent, such as
+    /// for an experimental adapter.
+    fn warning(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// The Agent the Profile asks for.
