@@ -9,6 +9,8 @@ use rusqlite::{Connection, params};
 use crate::agent::{INSTRUCTIONS_VERSION, Judgement, TravelFunded};
 use crate::candidate::Candidate;
 
+mod travel;
+
 /// Applied in order; `PRAGMA user_version` records how many have run.
 /// Later changes append a migration and never edit an earlier one.
 const MIGRATIONS: &[&str] = &[
@@ -58,6 +60,29 @@ const MIGRATIONS: &[&str] = &[
         first_queued TEXT NOT NULL,
         attempts     INTEGER NOT NULL DEFAULT 0,
         last_error   TEXT,
+        PRIMARY KEY (source, source_key)
+    );",
+    // Getting there (ADR 0002): the Agent's travel estimates, cached per Home city
+    // and destination city (names lower-cased; NULL train_minutes or airport means
+    // no practical train or flight), and the Trip worked out for each Hackathon.
+    "CREATE TABLE travel_estimates (
+        home_city            TEXT NOT NULL,
+        city                 TEXT NOT NULL,
+        country              TEXT NOT NULL,
+        train_minutes        INTEGER CHECK (train_minutes > 0),
+        airport              TEXT,
+        agent                TEXT NOT NULL,
+        instructions_version TEXT NOT NULL,
+        estimated_on         TEXT NOT NULL,
+        PRIMARY KEY (home_city, city, country)
+    );
+    CREATE TABLE trips (
+        source        TEXT NOT NULL,
+        source_key    TEXT NOT NULL,
+        kind          TEXT NOT NULL CHECK (kind IN ('local', 'train', 'flight')),
+        train_minutes INTEGER,
+        airport       TEXT,
+        label         TEXT NOT NULL,
         PRIMARY KEY (source, source_key)
     );",
 ];
@@ -511,7 +536,7 @@ mod tests {
             .conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, i64::try_from(MIGRATIONS.len()).unwrap());
         assert_eq!(
             store.hackathons().unwrap()[0].announced_on,
             Some(NaiveDate::from_ymd_opt(2026, 11, 1).unwrap())

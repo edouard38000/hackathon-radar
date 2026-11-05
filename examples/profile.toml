@@ -4,10 +4,24 @@
 # The countries you'll travel to at your own cost.
 countries = ["Belgium", "France", "Netherlands", "Luxembourg"]
 
-# The city you travel from, and the airports you fly out of (IATA codes).
+# The city you travel from, its country (optional; with it, train trips within
+# that country count as local), and the airports you fly out of (IATA codes).
 [home]
 city = "Brussels"
+country = "Belgium"
 airports = ["BRU", "CRL"]
+
+# Getting there. Optional: without it, the Train limit is 4 hours. A train
+# journey longer than the Train limit counts as a flight. Your Agent estimates
+# train times and nearest airports once per city; correct any of them with an
+# override, which sets train_hours, airport, or no_practical_flight = true.
+# [travel]
+# train_limit_hours = 4
+#
+# [[travel.overrides]]
+# city = "Munich"
+# train_hours = 5.5
+# airport = "MUC"
 
 # Where Alerts go. Without this section, Alerts are only printed.
 # ntfy (https://ntfy.sh) needs no account: install its phone app, subscribe to

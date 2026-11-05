@@ -102,6 +102,12 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
     if let Some(failure) = &outcome.agent_failure {
         eprintln!("warning: the Agent could not judge this Run: {failure}");
     }
+    if let Some(failure) = &outcome.travel_failure {
+        eprintln!(
+            "warning: the Agent's travel estimates failed; {} cities wait for the next Run: {failure}",
+            outcome.unestimated
+        );
+    }
     println!(
         "Collected {} Candidates; {} Hackathons fit and are stored in {}.",
         outcome.collected,

@@ -1,0 +1,34 @@
+{
+  "title": "hackathon-radar travel estimates",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["travel"],
+  "properties": {
+    "travel": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "train_hours", "airport"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The id of the Destination, exactly as given."
+          },
+          "train_hours": {
+            "type": ["number", "null"],
+            "exclusiveMinimum": 0,
+            "maximum": 48,
+            "description": "The fastest realistic train journey from Home, in hours; null when there is no practical train connection."
+          },
+          "airport": {
+            "type": ["string", "null"],
+            "pattern": "^[A-Z]{3}$",
+            "description": "IATA code of the airport nearest the Destination with flights from one of Home's airports; null when there is no practical flight."
+          }
+        }
+      }
+    }
+  }
+}

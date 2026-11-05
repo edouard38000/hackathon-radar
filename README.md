@@ -88,6 +88,12 @@ The agent must print only the JSON answer on stdout and exit with code 0; anythi
 
 **A generic agent must be read-only, and that is up to you.** hackathon-radar can't see inside another agent, so your command must give it web search and page reading and nothing else: no shell, no file writes, no MCP servers or other tools, and no flag that skips permissions or makes its sandbox writable. It reads arbitrary web pages on every Run, unattended, and must not be able to act on anything it reads there. hackathon-radar rejects any answer that doesn't match the schema, but it can't stop an agent you've given more power from using it.
 
+### Getting there
+
+Each Hackathon that Fits is labelled with how you'd get there from Home: `local` (in your Home city, or in Home's country within the Train limit), by train within the Train limit (`train ~2h`), or by flight to its nearest served airport (`fly BRU→MUC`). The label is stored and shown in the Alert entry. The Train limit is `travel.train_limit_hours` in your Profile (4 by default).
+
+The Agent estimates the fastest train journey from Home and the nearest airport with flights from your Home airports once per destination city, in a second, smaller request with its own built-in prompt and schema, run with the same read-only command line. The answers are cached per Home city and destination city, so later Runs never ask about a city again; a malformed answer is rejected and its cities are asked about on the next Run. If an estimate is wrong, add a `[[travel.overrides]]` entry for that city (see [`examples/profile.toml`](examples/profile.toml)); overrides always win over the cache. For now every trip within your Countries stays in scope, flights included: the Flight budget, which will decide flights, comes with Fares.
+
 ## Development
 
 ```sh

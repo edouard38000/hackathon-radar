@@ -9,6 +9,7 @@ use std::path::Path;
 use chrono::NaiveDate;
 use tempfile::TempDir;
 
+use hackathon_radar::agent::travel::TRAVEL_SCHEMA;
 use hackathon_radar::agent::{Agent, JudgeRequest, Judgement, TravelFunded};
 use hackathon_radar::alert::{Alert, AlertChannel};
 use hackathon_radar::candidate::Candidate;
@@ -175,6 +176,15 @@ pub struct FakeAgent {
     pub asked: RefCell<Vec<Vec<String>>>,
     /// The Eligibility facts sent with each request.
     pub eligibility: RefCell<Vec<Eligibility>>,
+    /// Travel estimates by destination city: train hours and airport, `None`
+    /// for no practical train or flight. Cities not listed are left out of the
+    /// answer, so they get no Trip yet.
+    pub estimates: Vec<(String, Option<f64>, Option<String>)>,
+    /// When set, travel requests are answered with this text as it is.
+    pub travel_raw: Option<String>,
+    /// The destination cities sent, one list per travel request. Travel
+    /// requests are not counted in `asked`.
+    pub travel_asked: RefCell<Vec<Vec<String>>>,
 }
 
 impl FakeAgent {
@@ -187,6 +197,9 @@ impl FakeAgent {
             leave_out: Vec::new(),
             asked: RefCell::new(Vec::new()),
             eligibility: RefCell::new(Vec::new()),
+            estimates: Vec::new(),
+            travel_raw: None,
+            travel_asked: RefCell::new(Vec::new()),
         }
     }
 
@@ -212,6 +225,58 @@ impl FakeAgent {
     pub fn requests(&self) -> usize {
         self.asked.borrow().len()
     }
+
+    /// Estimates `city` at `train_hours` by train, flying to `airport`.
+    pub fn with_estimate(
+        mut self,
+        city: &str,
+        train_hours: Option<f64>,
+        airport: Option<&str>,
+    ) -> Self {
+        self.estimates
+            .push((city.to_owned(), train_hours, airport.map(str::to_owned)));
+        self
+    }
+
+    /// Answers a travel request from `estimates`, reading the Destinations
+    /// from the prompt as a real Agent would.
+    fn estimate(&self, request: &JudgeRequest<'_>) -> anyhow::Result<String> {
+        let (_, listed) = request
+            .prompt
+            .rsplit_once("## Destinations")
+            .expect("a travel prompt lists its Destinations last");
+        let destinations: Vec<serde_json::Value> = serde_json::from_str(listed.trim()).unwrap();
+        let cities: Vec<String> = destinations
+            .iter()
+            .map(|d| d["city"].as_str().unwrap().to_owned())
+            .collect();
+        self.travel_asked.borrow_mut().push(cities);
+        if let FakeAnswer::Fail(error) = &self.answer {
+            anyhow::bail!("{error}");
+        }
+        if let Some(raw) = &self.travel_raw {
+            return Ok(raw.clone());
+        }
+        let travel: Vec<serde_json::Value> = destinations
+            .iter()
+            .filter_map(|d| {
+                let (_, train_hours, airport) = self
+                    .estimates
+                    .iter()
+                    .find(|(city, _, _)| city == d["city"].as_str().unwrap())?;
+                Some(serde_json::json!({
+                    "id": d["id"],
+                    "train_hours": train_hours,
+                    "airport": airport,
+                }))
+            })
+            .collect();
+        Ok(serde_json::json!({ "travel": travel }).to_string())
+    }
+
+    pub fn travel_requests(&self) -> usize {
+        self.travel_asked.borrow().len()
+    }
 }
 
 impl Agent for FakeAgent {
@@ -220,6 +285,9 @@ impl Agent for FakeAgent {
     }
 
     fn judge(&self, request: &JudgeRequest<'_>) -> anyhow::Result<String> {
+        if request.schema == TRAVEL_SCHEMA {
+            return self.estimate(request);
+        }
         let names = request
             .candidates
             .iter()
@@ -295,6 +363,21 @@ pub fn travel_funded(how: TravelFunded, detail: &str) -> Judgement {
         travel_detail: Some(detail.into()),
         ..hackathon()
     }
+}
+
+/// A Profile with Home in Brussels, Belgium, flying from BRU or CRL, and
+/// `travel` appended (such as a `[travel]` section).
+pub fn travel_profile(countries: &[&str], travel: &str) -> Profile {
+    let countries = countries
+        .iter()
+        .map(|c| format!("{c:?}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let text = format!(
+        "countries = [{countries}]\n\n[home]\ncity = \"Brussels\"\ncountry = \"Belgium\"\n\
+         airports = [\"BRU\", \"CRL\"]\n{travel}"
+    );
+    Profile::from_toml(&text, Path::new("test-profile.toml")).unwrap()
 }
 
 pub fn profile(countries: &[&str]) -> Profile {
@@ -383,6 +466,14 @@ impl Harness {
             options,
         )
         .expect("the Run failed")
+    }
+
+    /// The stored Trip label of the Hackathon listed under this name by the fake Source.
+    pub fn trip_label(&self, name: &str) -> Option<String> {
+        self.store
+            .trip("fake", name)
+            .unwrap()
+            .map(|trip| trip.label)
     }
 
     pub fn unjudged_names(&self) -> Vec<String> {

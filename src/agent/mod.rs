@@ -11,6 +11,7 @@
 pub mod claude_code;
 pub mod codex;
 pub mod command;
+pub mod travel;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -42,7 +43,8 @@ pub trait Agent {
     fn name(&self) -> &str;
 
     /// Asks the Agent to judge the request's Candidates and returns its answer,
-    /// which should be JSON matching [`SCHEMA`]. An error means the Agent failed,
+    /// which should be JSON matching the request's schema: [`SCHEMA`], or
+    /// [`travel::TRAVEL_SCHEMA`] for travel estimates. An error means the Agent failed,
     /// ran out of steps or time, or gave no answer at all.
     fn judge(&self, request: &JudgeRequest<'_>) -> anyhow::Result<String>;
 

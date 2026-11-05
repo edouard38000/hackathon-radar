@@ -9,6 +9,10 @@ use serde::Deserialize;
 
 use crate::agent::command::CommandTemplate;
 
+mod travel;
+
+pub use travel::{DEFAULT_TRAIN_LIMIT_MINUTES, FlightOverride, TravelOverride, TravelSettings};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Profile {
     pub home: Home,
@@ -20,11 +24,16 @@ pub struct Profile {
     pub schedule: Schedule,
     pub eligibility: Eligibility,
     pub agent: AgentSettings,
+    /// The Train limit and the person's corrections to travel estimates.
+    pub travel: TravelSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Home {
     pub city: String,
+    /// The country Home is in. Optional: without it, only trips within Home's
+    /// city count as local.
+    pub country: Option<String>,
     /// IATA codes of the airports the person flies out of, upper-cased.
     pub airports: Vec<String>,
 }
@@ -155,12 +164,15 @@ struct ProfileFile {
     eligibility: Eligibility,
     #[serde(default)]
     agent: AgentSettings,
+    #[serde(default)]
+    travel: travel::TravelFile,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct HomeFile {
     city: String,
+    country: Option<String>,
     airports: Vec<String>,
 }
 
@@ -201,6 +213,13 @@ impl Profile {
         if city.is_empty() {
             problems.push("home.city is empty; give the city you travel from".to_owned());
         }
+        let home_country = file.home.country.as_deref().map(str::trim);
+        if home_country == Some("") {
+            problems.push(
+                "home.country is empty; give the country Home is in, or leave it out".to_owned(),
+            );
+        }
+        let home_country = home_country.map(str::to_owned);
 
         let airports: Vec<String> = file
             .home
@@ -271,6 +290,7 @@ impl Profile {
                 other.as_str()
             )),
         }
+        let travel = TravelSettings::from_file(file.travel, &mut problems);
 
         if !problems.is_empty() {
             return Err(ProfileError::Invalid {
@@ -279,12 +299,17 @@ impl Profile {
             });
         }
         Ok(Profile {
-            home: Home { city, airports },
+            home: Home {
+                city,
+                country: home_country,
+                airports,
+            },
             countries,
             alert_channel,
             schedule,
             eligibility,
             agent: file.agent,
+            travel,
         })
     }
 
@@ -467,6 +492,7 @@ mod tests {
             Profile {
                 home: Home {
                     city: "Brussels".into(),
+                    country: None,
                     airports: vec!["BRU".into(), "CRL".into()],
                 },
                 countries: vec!["Belgium".into(), "France".into()],
@@ -479,6 +505,7 @@ mod tests {
                     command: None,
                     experimental: false,
                 },
+                travel: TravelSettings::default(),
             }
         );
         assert!(profile.includes_country("belgium"));

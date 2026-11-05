@@ -1,0 +1,19 @@
+{
+  "travel": [
+    {
+      "id": "1",
+      "train_hours": 1.4,
+      "airport": "CDG"
+    },
+    {
+      "id": "2",
+      "train_hours": 6.4,
+      "airport": "MUC"
+    },
+    {
+      "id": "3",
+      "train_hours": null,
+      "airport": "BIA"
+    }
+  ]
+}
