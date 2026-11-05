@@ -2,9 +2,11 @@
 //! sends at most one Alert. Everything it touches is passed in, so tests can
 //! drive a whole Run with fakes.
 
+use crate::agent::Agent;
 use crate::alert::{self, Alert, AlertChannel, AlertKind};
 use crate::candidate::Candidate;
 use crate::clock::Clock;
+use crate::judging;
 use crate::profile::Profile;
 use crate::rules;
 use crate::sources::Source;
@@ -16,6 +18,7 @@ pub struct RunDeps<'a> {
     pub clock: &'a dyn Clock,
     pub store: &'a mut Store,
     pub channel: &'a mut dyn AlertChannel,
+    pub agent: &'a dyn Agent,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -36,6 +39,12 @@ pub struct RunOutcome {
     pub alert: Option<Alert>,
     /// Whether the Alert went to the Alert channel.
     pub sent: bool,
+    /// How many Candidates the Agent judged on this Run.
+    pub judged: usize,
+    /// How many Candidates are still waiting for the Agent; the next Run sends them again.
+    pub unjudged: usize,
+    /// Why the Agent couldn't judge this Run, if it couldn't.
+    pub agent_failure: Option<String>,
 }
 
 #[derive(Debug)]
@@ -60,7 +69,9 @@ pub fn run(deps: RunDeps<'_>, options: RunOptions) -> anyhow::Result<RunOutcome>
     }
     let collected = candidates.len();
 
-    let fitting = rules::apply(candidates, deps.profile, today);
+    let passed = rules::apply(candidates, deps.profile, today);
+    let judged = judging::judge(deps.agent, deps.profile, deps.store, passed, today)?;
+    let fitting = judged.fitting;
     deps.store.save_hackathons(&fitting, today)?;
 
     // Until something has been Announced, the Alert is the Welcome Alert; either
@@ -89,5 +100,8 @@ pub fn run(deps: RunDeps<'_>, options: RunOptions) -> anyhow::Result<RunOutcome>
         failed_sources,
         alert: composed.map(|c| c.alert),
         sent,
+        judged: judged.judged_now,
+        unjudged: judged.unjudged,
+        agent_failure: judged.failure,
     })
 }

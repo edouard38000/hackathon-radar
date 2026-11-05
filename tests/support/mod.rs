@@ -9,11 +9,12 @@ use std::path::Path;
 use chrono::NaiveDate;
 use tempfile::TempDir;
 
+use hackathon_radar::agent::{Agent, JudgeRequest, Judgement, TravelFunded};
 use hackathon_radar::alert::{Alert, AlertChannel};
 use hackathon_radar::candidate::Candidate;
 use hackathon_radar::clock::Clock;
 use hackathon_radar::http::{HttpGet, HttpPost, PostRequest};
-use hackathon_radar::profile::Profile;
+use hackathon_radar::profile::{Eligibility, Profile};
 use hackathon_radar::run::{self, RunDeps, RunOptions, RunOutcome};
 use hackathon_radar::sources::Source;
 use hackathon_radar::sources::hackathon_be::{self, HackathonBe};
@@ -152,6 +153,150 @@ pub fn render_request(request: &PostRequest) -> String {
     text
 }
 
+/// What the fake Agent does when asked.
+pub enum FakeAnswer {
+    /// Judges each Candidate with the verdict set for its name, or the default.
+    Judge,
+    /// Fails, as an Agent that errors, times out or runs out of steps does.
+    Fail(String),
+    /// Answers this text as it is, matching the schema or not.
+    Raw(String),
+}
+
+/// An Agent that answers canned judgements and records what it was asked.
+pub struct FakeAgent {
+    pub answer: FakeAnswer,
+    /// Verdicts by Candidate name; any other Candidate gets `default`.
+    pub verdicts: Vec<(String, Judgement)>,
+    pub default: Judgement,
+    /// Candidate names the answer leaves out.
+    pub leave_out: Vec<String>,
+    /// The names of the Candidates sent, one list per request.
+    pub asked: RefCell<Vec<Vec<String>>>,
+    /// The Eligibility facts sent with each request.
+    pub eligibility: RefCell<Vec<Eligibility>>,
+}
+
+impl FakeAgent {
+    /// Judges every Candidate a Hackathon the person is eligible for, not Travel-funded.
+    pub fn approving() -> Self {
+        Self {
+            answer: FakeAnswer::Judge,
+            verdicts: Vec::new(),
+            default: hackathon(),
+            leave_out: Vec::new(),
+            asked: RefCell::new(Vec::new()),
+            eligibility: RefCell::new(Vec::new()),
+        }
+    }
+
+    pub fn failing(error: &str) -> Self {
+        Self {
+            answer: FakeAnswer::Fail(error.to_owned()),
+            ..Self::approving()
+        }
+    }
+
+    pub fn answering(raw: &str) -> Self {
+        Self {
+            answer: FakeAnswer::Raw(raw.to_owned()),
+            ..Self::approving()
+        }
+    }
+
+    pub fn with_verdict(mut self, name: &str, judgement: Judgement) -> Self {
+        self.verdicts.push((name.to_owned(), judgement));
+        self
+    }
+
+    pub fn requests(&self) -> usize {
+        self.asked.borrow().len()
+    }
+}
+
+impl Agent for FakeAgent {
+    fn name(&self) -> &str {
+        "fake"
+    }
+
+    fn judge(&self, request: &JudgeRequest<'_>) -> anyhow::Result<String> {
+        let names = request
+            .candidates
+            .iter()
+            .map(|c| c.candidate.name.clone())
+            .collect();
+        self.asked.borrow_mut().push(names);
+        self.eligibility
+            .borrow_mut()
+            .push(request.eligibility.clone());
+        match &self.answer {
+            FakeAnswer::Fail(error) => anyhow::bail!("{error}"),
+            FakeAnswer::Raw(text) => Ok(text.clone()),
+            FakeAnswer::Judge => {
+                let judgements: Vec<serde_json::Value> = request
+                    .candidates
+                    .iter()
+                    .filter(|sent| !self.leave_out.contains(&sent.candidate.name))
+                    .map(|sent| {
+                        let j = self
+                            .verdicts
+                            .iter()
+                            .find(|(name, _)| *name == sent.candidate.name)
+                            .map_or(&self.default, |(_, j)| j);
+                        serde_json::json!({
+                            "id": sent.id,
+                            "is_hackathon": j.is_hackathon,
+                            "eligible": j.eligible,
+                            "eligibility_restriction": j.eligibility_restriction,
+                            "travel_funded": j.travel_funded,
+                            "travel_detail": j.travel_detail,
+                            "reason": j.reason,
+                        })
+                    })
+                    .collect();
+                Ok(serde_json::json!({ "judgements": judgements }).to_string())
+            }
+        }
+    }
+}
+
+/// A Hackathon the person is eligible for, not Travel-funded.
+pub fn hackathon() -> Judgement {
+    Judgement {
+        is_hackathon: true,
+        eligible: true,
+        eligibility_restriction: None,
+        travel_funded: TravelFunded::None,
+        travel_detail: None,
+        reason: "Teams build software over a weekend.".into(),
+    }
+}
+
+pub fn not_a_hackathon() -> Judgement {
+    Judgement {
+        is_hackathon: false,
+        reason: "A pitch competition; nothing is built.".into(),
+        ..hackathon()
+    }
+}
+
+pub fn ineligible(restriction: &str) -> Judgement {
+    Judgement {
+        eligible: false,
+        eligibility_restriction: Some(restriction.into()),
+        reason: "Only open to others.".into(),
+        ..hackathon()
+    }
+}
+
+pub fn travel_funded(how: TravelFunded, detail: &str) -> Judgement {
+    Judgement {
+        travel_funded: how,
+        travel_detail: Some(detail.into()),
+        ..hackathon()
+    }
+}
+
 pub fn profile(countries: &[&str]) -> Profile {
     let countries = countries
         .iter()
@@ -164,12 +309,14 @@ pub fn profile(countries: &[&str]) -> Profile {
     Profile::from_toml(&text, Path::new("test-profile.toml")).unwrap()
 }
 
-/// Everything one or more Runs share: a Profile, a temporary database on disk and
-/// a recording Alert channel. Each Run gets its own Sources and clock.
+/// Everything one or more Runs share: a Profile, a temporary database on disk,
+/// a recording Alert channel and a fake Agent (which approves every Candidate
+/// unless a test sets it up otherwise). Each Run gets its own Sources and clock.
 pub struct Harness {
     pub profile: Profile,
     pub store: Store,
     pub channel: RecordingChannel,
+    pub agent: FakeAgent,
     _dir: TempDir,
 }
 
@@ -181,6 +328,7 @@ impl Harness {
             profile,
             store,
             channel: RecordingChannel::default(),
+            agent: FakeAgent::approving(),
             _dir: dir,
         }
     }
@@ -208,9 +356,42 @@ impl Harness {
                 clock: &FixedClock(today),
                 store: &mut self.store,
                 channel: &mut self.channel,
+                agent: &self.agent,
             },
             options,
         )
+    }
+
+    /// A Run with another Agent than the harness's fake, such as a real adapter
+    /// driven by a fake process runner.
+    pub fn run_with_agent(
+        &mut self,
+        agent: &dyn Agent,
+        sources: &[Box<dyn Source>],
+        today: NaiveDate,
+        options: RunOptions,
+    ) -> RunOutcome {
+        run::run(
+            RunDeps {
+                profile: &self.profile,
+                sources,
+                clock: &FixedClock(today),
+                store: &mut self.store,
+                channel: &mut self.channel,
+                agent,
+            },
+            options,
+        )
+        .expect("the Run failed")
+    }
+
+    pub fn unjudged_names(&self) -> Vec<String> {
+        self.store
+            .unjudged()
+            .unwrap()
+            .into_iter()
+            .map(|u| u.candidate.name)
+            .collect()
     }
 
     pub fn stored_names(&self) -> Vec<String> {

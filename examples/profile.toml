@@ -24,3 +24,14 @@ airports = ["BRU", "CRL"]
 # [schedule]
 # days = ["Monday", "Thursday"]
 # time = "08:00"
+# Facts organisers restrict on. Leave out any you'd rather not give; the Agent
+# then treats them as no obstacle.
+[eligibility]
+student = false
+nationalities = ["Belgian"]
+# age = 27
+
+# The Agent that judges listings, and the most steps it may take on one Run.
+[agent]
+adapter = "claude-code"
+max_turns = 50

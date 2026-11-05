@@ -16,6 +16,8 @@ pub struct Profile {
     pub alert_channel: Option<AlertChannelSetting>,
     /// When scheduled Runs happen.
     pub schedule: Schedule,
+    pub eligibility: Eligibility,
+    pub agent: AgentSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +41,54 @@ pub struct NtfySetting {
 }
 
 pub const DEFAULT_NTFY_SERVER: &str = "https://ntfy.sh";
+/// The facts about the person that organisers restrict on. Each is optional;
+/// the Agent treats a fact that isn't given as no obstacle.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Eligibility {
+    /// Whether the person is a student.
+    pub student: Option<bool>,
+    /// Nationalities, such as `French`.
+    #[serde(default)]
+    pub nationalities: Vec<String>,
+    pub age: Option<u32>,
+}
+
+/// Which Agent judges Candidates, and how far it may go on one Run.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentSettings {
+    #[serde(default)]
+    pub adapter: AgentAdapter,
+    /// The most Agent steps (turns) one Run may use.
+    #[serde(default = "default_max_turns")]
+    pub max_turns: u32,
+}
+
+/// The Agents hackathon-radar can run.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AgentAdapter {
+    /// Claude Code, run headless with `claude -p`.
+    #[default]
+    ClaudeCode,
+}
+
+/// Enough for a Run's batch of Candidates, each needing a page read or a search or two.
+pub const DEFAULT_MAX_TURNS: u32 = 50;
+
+fn default_max_turns() -> u32 {
+    DEFAULT_MAX_TURNS
+}
+
+impl Default for AgentSettings {
+    fn default() -> Self {
+        Self {
+            adapter: AgentAdapter::default(),
+            max_turns: DEFAULT_MAX_TURNS,
+        }
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProfileError {
@@ -76,6 +126,10 @@ struct ProfileFile {
     alert_channel: Option<AlertChannelFile>,
     #[serde(default)]
     schedule: ScheduleFile,
+    #[serde(default)]
+    eligibility: Eligibility,
+    #[serde(default)]
+    agent: AgentSettings,
 }
 
 #[derive(Deserialize)]
@@ -158,6 +212,19 @@ impl Profile {
             .and_then(|channel| alert_channel(channel, &mut problems));
 
         let schedule = Schedule::from_file(file.schedule, &mut problems);
+        let mut eligibility = file.eligibility;
+        eligibility.nationalities = eligibility
+            .nationalities
+            .iter()
+            .map(|n| n.trim().to_owned())
+            .collect();
+        if eligibility.nationalities.iter().any(String::is_empty) {
+            problems.push("eligibility.nationalities has an empty entry".to_owned());
+        }
+
+        if file.agent.max_turns == 0 {
+            problems.push("agent.max_turns is 0; the Agent needs at least one step".to_owned());
+        }
 
         if !problems.is_empty() {
             return Err(ProfileError::Invalid {
@@ -170,6 +237,8 @@ impl Profile {
             countries,
             alert_channel,
             schedule,
+            eligibility,
+            agent: file.agent,
         })
     }
 
@@ -357,6 +426,11 @@ mod tests {
                 countries: vec!["Belgium".into(), "France".into()],
                 alert_channel: None,
                 schedule: Schedule::default(),
+                eligibility: Eligibility::default(),
+                agent: AgentSettings {
+                    adapter: AgentAdapter::ClaudeCode,
+                    max_turns: DEFAULT_MAX_TURNS,
+                },
             }
         );
         assert!(profile.includes_country("belgium"));
@@ -405,6 +479,53 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.to_string().contains("country"), "{err}");
+    }
+
+    #[test]
+    fn reads_eligibility_and_the_agent_setting() {
+        let profile = parse(
+            r#"
+            countries = ["Belgium"]
+
+            [home]
+            city = "Brussels"
+            airports = ["BRU"]
+
+            [eligibility]
+            student = true
+            nationalities = [" French "]
+            age = 24
+
+            [agent]
+            adapter = "claude-code"
+            max_turns = 12
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            profile.eligibility,
+            Eligibility {
+                student: Some(true),
+                nationalities: vec!["French".into()],
+                age: Some(24),
+            }
+        );
+        assert_eq!(
+            profile.agent,
+            AgentSettings {
+                adapter: AgentAdapter::ClaudeCode,
+                max_turns: 12,
+            }
+        );
+    }
+
+    #[test]
+    fn an_unknown_agent_or_a_zero_step_cap_is_refused() {
+        let base = "countries = [\"Belgium\"]\n[home]\ncity = \"Lyon\"\nairports = [\"LYS\"]\n";
+        let err = parse(&format!("{base}[agent]\nadapter = \"skynet\"\n")).unwrap_err();
+        assert!(err.to_string().contains("claude-code"), "{err}");
+        let err = parse(&format!("{base}[agent]\nmax_turns = 0\n")).unwrap_err();
+        assert!(err.to_string().contains("agent.max_turns is 0"), "{err}");
     }
 
     #[test]

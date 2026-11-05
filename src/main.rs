@@ -4,6 +4,7 @@ use std::process::ExitCode;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 
+use hackathon_radar::agent;
 use hackathon_radar::alert::ntfy::{self, NtfyChannel};
 use hackathon_radar::alert::{AlertChannel, PrintChannel};
 use hackathon_radar::clock::SystemClock;
@@ -72,6 +73,7 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
     let mut store = Store::open(&db_path)?;
     let sources: Vec<Box<dyn Source>> = vec![Box::new(HackathonBe::new(HttpClient::new()))];
     let mut channel = alert_channel(&profile);
+    let agent = agent::from_settings(&profile.agent);
 
     let outcome = run::run(
         RunDeps {
@@ -80,6 +82,7 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
             clock: &SystemClock,
             store: &mut store,
             channel: channel.as_mut(),
+            agent: agent.as_ref(),
         },
         RunOptions {
             dry_run: args.dry_run,
@@ -93,11 +96,18 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
             failure.source, failure.error
         );
     }
+    if let Some(failure) = &outcome.agent_failure {
+        eprintln!("warning: the Agent could not judge this Run: {failure}");
+    }
     println!(
         "Collected {} Candidates; {} Hackathons fit and are stored in {}.",
         outcome.collected,
         outcome.fitting.len(),
         db_path.display()
+    );
+    println!(
+        "The Agent judged {} Candidates; {} wait for the next Run.",
+        outcome.judged, outcome.unjudged
     );
     if args.dry_run {
         match &outcome.alert {
@@ -115,7 +125,8 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
 
     // Every Source failing means the Run learnt nothing, which a scheduler should see.
     let all_failed = !sources.is_empty() && outcome.failed_sources.len() == sources.len();
-    Ok(if all_failed {
+    // So does an Agent that couldn't judge; its Candidates are kept for the next Run.
+    Ok(if all_failed || outcome.agent_failure.is_some() {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
