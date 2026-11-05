@@ -101,5 +101,5 @@ Two listings, usually from different Sources, that describe the same Hackathon; 
 _Avoid_: Duplicate event, semantic duplicate
 
 **Candidate**:
-A listing collected from a Source that has passed the rules checkable from data alone, but not yet been confirmed as a Hackathon that Fits.
+A listing collected from a Source during a Run, before it has been confirmed as a Hackathon that Fits; the Profile's rules and the Agent decide which Candidates become Hackathons that Fit.
 _Avoid_: Lead, raw event, result
