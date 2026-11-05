@@ -34,7 +34,8 @@ pub enum Placeholder {
     Schema,
     /// The whole prompt. Without it, the prompt goes on stdin.
     Prompt,
-    /// The Profile's `agent.max_turns`.
+    /// The request's step cap: the Profile's `agent.max_turns`, or
+    /// `agent.travel_max_turns` for travel estimates.
     MaxTurns,
 }
 
@@ -268,7 +269,8 @@ impl<R: ProcessRunner> Generic<R> {
             schema_file,
             schema: request.schema,
             prompt: &request.prompt,
-            max_turns: self.max_turns,
+            // A request's own step cap, such as the travel request's, wins.
+            max_turns: request.step_cap.map_or(self.max_turns, |cap| cap.max_turns),
         });
         let stdin = if self.template.uses(Placeholder::Prompt) {
             String::new()

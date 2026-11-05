@@ -47,7 +47,7 @@ Each Run sends the listings that passed the Profile's rules to your Agent, chose
 claude -p --permission-mode dontAsk --tools WebSearch,WebFetch --allowedTools WebSearch,WebFetch --strict-mcp-config --setting-sources "" --max-turns <cap> --output-format json --json-schema <schema>
 ```
 
-It loads none of your Claude Code settings, hooks or MCP servers, so nothing you've allowed for your own work applies to it. The step cap is `agent.max_turns` in your Profile (50 by default).
+It loads none of your Claude Code settings, hooks or MCP servers, so nothing you've allowed for your own work applies to it. The step cap is `agent.max_turns` in your Profile (50 by default). A Run makes at most two Agent requests: judging, capped by `agent.max_turns`, and travel estimates (see Getting there), capped by `agent.travel_max_turns` (15 by default).
 
 **Codex** (`adapter = "codex"`, experimental) runs headless on your own `codex` login (or `CODEX_API_KEY`, if you set it). If `codex` isn't signed in, run `codex login` once yourself.
 
@@ -55,7 +55,7 @@ It loads none of your Claude Code settings, hooks or MCP servers, so nothing you
 codex exec --sandbox read-only --skip-git-repo-check --ephemeral --ignore-user-config --ignore-rules -c approval_policy="never" -c web_search="live" -c features.shell_tool=false -c features.view_image=false --output-schema <schema file> --json -
 ```
 
-The sandbox is read-only and nothing is ever approved; the shell and local-image tools are turned off, so live web search (which also opens pages) is all it has. It loads none of your `config.toml` (so none of your MCP servers or sandbox settings) and none of your execpolicy rules, and keeps no session files. Codex has no step cap of its own, so `agent.max_turns` doesn't apply to it; the 30-minute limit does.
+The sandbox is read-only and nothing is ever approved; the shell and local-image tools are turned off, so live web search (which also opens pages) is all it has. It loads none of your `config.toml` (so none of your MCP servers or sandbox settings) and none of your execpolicy rules, and keeps no session files. Codex has no step cap of its own, so neither `agent.max_turns` nor `agent.travel_max_turns` applies to it; the 30-minute limit does.
 
 **The Codex adapter is experimental.** Its read-only lockdown comes from OpenAI's documentation and is unverified against a real Codex CLI: if Codex ignored one of these settings, it could keep a shell that reads your whole disk while it reads arbitrary web pages. So it only runs when you opt in knowingly, and every Run that uses it prints a warning:
 
@@ -82,11 +82,17 @@ The first entry is the program; the rest are its arguments. The command runs wit
 | `{schema_file}` | the path of a file holding the JSON schema |
 | `{schema}` | the JSON schema itself |
 | `{prompt}` | the whole prompt; when you use it, stdin stays empty |
-| `{max_turns}` | `agent.max_turns` from your Profile |
+| `{max_turns}` | `agent.max_turns` from your Profile, or `agent.travel_max_turns` for travel estimates |
 
 The agent must print only the JSON answer on stdout and exit with code 0; anything else counts as the Agent failing, and the listings wait for the next Run.
 
 **A generic agent must be read-only, and that is up to you.** hackathon-radar can't see inside another agent, so your command must give it web search and page reading and nothing else: no shell, no file writes, no MCP servers or other tools, and no flag that skips permissions or makes its sandbox writable. It reads arbitrary web pages on every Run, unattended, and must not be able to act on anything it reads there. hackathon-radar rejects any answer that doesn't match the schema, but it can't stop an agent you've given more power from using it.
+
+### Getting there
+
+Each Hackathon that Fits is labelled with how you'd get there from Home: `local` (in your Home city, or in Home's country within the Train limit), by train within the Train limit (`train ~2h`), or by flight to its nearest served airport (`fly BRU→MUC`). The label is stored and shown in the Alert entry. The Train limit is `travel.train_limit_hours` in your Profile (4 by default).
+
+The Agent estimates the fastest train journey from Home and the nearest airport with flights from your Home airports once per destination city, in a second, smaller request with its own built-in prompt and schema, run with the same read-only command line and, for Agents that take a step cap, capped by `agent.travel_max_turns` (15 steps by default). The answers are cached per Home city and destination city, so later Runs never ask about a city again; a malformed answer is rejected and its cities are asked about on the next Run. If an estimate is wrong, add a `[[travel.overrides]]` entry for that city (see [`examples/profile.toml`](examples/profile.toml)); overrides always win over the cache. For now every trip within your Countries stays in scope, flights included: the Flight budget, which will decide flights, comes with Fares.
 
 ## Development
 

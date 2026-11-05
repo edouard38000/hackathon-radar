@@ -2,8 +2,8 @@
 //!
 //! A [`run`] collects Candidates from each [`sources::Source`], applies the
 //! Profile [`rules`] checkable from data alone, has the person's [`agent`] judge
-//! the rest ([`judging`]), keeps the result in the local [`store`] and composes
-//! the [`alert`] for the person.
+//! the rest ([`judging`]), works out how to get to each Hackathon ([`travel`]),
+//! keeps the result in the local [`store`] and composes the [`alert`] for the person.
 
 pub mod agent;
 pub mod alert;
@@ -20,3 +20,4 @@ pub mod run;
 pub mod scheduler;
 pub mod sources;
 pub mod store;
+pub mod travel;

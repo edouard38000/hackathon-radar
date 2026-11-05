@@ -11,6 +11,7 @@
 pub mod claude_code;
 pub mod codex;
 pub mod command;
+pub mod travel;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -42,7 +43,8 @@ pub trait Agent {
     fn name(&self) -> &str;
 
     /// Asks the Agent to judge the request's Candidates and returns its answer,
-    /// which should be JSON matching [`SCHEMA`]. An error means the Agent failed,
+    /// which should be JSON matching the request's schema: [`SCHEMA`], or
+    /// [`travel::TRAVEL_SCHEMA`] for travel estimates. An error means the Agent failed,
     /// ran out of steps or time, or gave no answer at all.
     fn judge(&self, request: &JudgeRequest<'_>) -> anyhow::Result<String>;
 
@@ -121,6 +123,17 @@ pub struct JudgeRequest<'a> {
     /// The full prompt, with the Eligibility facts and Candidates filled in.
     pub prompt: String,
     pub schema: &'static str,
+    /// This request's own step cap, for adapters that take one; `None` uses the
+    /// adapter's, which is the Profile's `agent.max_turns`.
+    pub step_cap: Option<StepCap>,
+}
+
+/// A step cap that a request carries instead of the adapter's own (ADR 0004).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StepCap {
+    pub max_turns: u32,
+    /// The Profile setting it comes from, named when the Agent runs out of steps.
+    pub setting: &'static str,
 }
 
 /// A Candidate as sent, with the id the Agent must answer with.
@@ -147,6 +160,7 @@ impl<'a> JudgeRequest<'a> {
             eligibility: &profile.eligibility,
             prompt,
             schema: SCHEMA,
+            step_cap: None,
         }
     }
 

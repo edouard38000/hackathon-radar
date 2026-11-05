@@ -9,6 +9,10 @@ use serde::Deserialize;
 
 use crate::agent::command::CommandTemplate;
 
+mod travel;
+
+pub use travel::{DEFAULT_TRAIN_LIMIT_MINUTES, FlightOverride, TravelOverride, TravelSettings};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Profile {
     pub home: Home,
@@ -20,11 +24,16 @@ pub struct Profile {
     pub schedule: Schedule,
     pub eligibility: Eligibility,
     pub agent: AgentSettings,
+    /// The Train limit and the person's corrections to travel estimates.
+    pub travel: TravelSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Home {
     pub city: String,
+    /// The country Home is in. Optional: without it, only trips within Home's
+    /// city count as local.
+    pub country: Option<String>,
     /// IATA codes of the airports the person flies out of, upper-cased.
     pub airports: Vec<String>,
 }
@@ -71,6 +80,9 @@ pub struct AgentSettings {
     /// Opts in to an experimental adapter (Codex); without it, the Profile refuses one.
     #[serde(default)]
     pub experimental: bool,
+    /// The most Agent steps the travel estimates request may use (ADR 0004).
+    #[serde(default = "default_travel_max_turns")]
+    pub travel_max_turns: u32,
 }
 
 /// The Agents hackathon-radar can run.
@@ -104,6 +116,14 @@ fn default_max_turns() -> u32 {
     DEFAULT_MAX_TURNS
 }
 
+/// Enough to estimate a Run's batch of destination cities, most of which need
+/// no more than a search.
+pub const DEFAULT_TRAVEL_MAX_TURNS: u32 = 15;
+
+fn default_travel_max_turns() -> u32 {
+    DEFAULT_TRAVEL_MAX_TURNS
+}
+
 impl Default for AgentSettings {
     fn default() -> Self {
         Self {
@@ -111,6 +131,7 @@ impl Default for AgentSettings {
             max_turns: DEFAULT_MAX_TURNS,
             command: None,
             experimental: false,
+            travel_max_turns: DEFAULT_TRAVEL_MAX_TURNS,
         }
     }
 }
@@ -155,12 +176,15 @@ struct ProfileFile {
     eligibility: Eligibility,
     #[serde(default)]
     agent: AgentSettings,
+    #[serde(default)]
+    travel: travel::TravelFile,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct HomeFile {
     city: String,
+    country: Option<String>,
     airports: Vec<String>,
 }
 
@@ -201,6 +225,13 @@ impl Profile {
         if city.is_empty() {
             problems.push("home.city is empty; give the city you travel from".to_owned());
         }
+        let home_country = file.home.country.as_deref().map(str::trim);
+        if home_country == Some("") {
+            problems.push(
+                "home.country is empty; give the country Home is in, or leave it out".to_owned(),
+            );
+        }
+        let home_country = home_country.map(str::to_owned);
 
         let airports: Vec<String> = file
             .home
@@ -271,6 +302,11 @@ impl Profile {
                 other.as_str()
             )),
         }
+        if file.agent.travel_max_turns == 0 {
+            problems
+                .push("agent.travel_max_turns is 0; the Agent needs at least one step".to_owned());
+        }
+        let travel = TravelSettings::from_file(file.travel, &mut problems);
 
         if !problems.is_empty() {
             return Err(ProfileError::Invalid {
@@ -279,12 +315,17 @@ impl Profile {
             });
         }
         Ok(Profile {
-            home: Home { city, airports },
+            home: Home {
+                city,
+                country: home_country,
+                airports,
+            },
             countries,
             alert_channel,
             schedule,
             eligibility,
             agent: file.agent,
+            travel,
         })
     }
 
@@ -467,6 +508,7 @@ mod tests {
             Profile {
                 home: Home {
                     city: "Brussels".into(),
+                    country: None,
                     airports: vec!["BRU".into(), "CRL".into()],
                 },
                 countries: vec!["Belgium".into(), "France".into()],
@@ -478,7 +520,9 @@ mod tests {
                     max_turns: DEFAULT_MAX_TURNS,
                     command: None,
                     experimental: false,
+                    travel_max_turns: DEFAULT_TRAVEL_MAX_TURNS,
                 },
+                travel: TravelSettings::default(),
             }
         );
         assert!(profile.includes_country("belgium"));
@@ -547,6 +591,7 @@ mod tests {
             [agent]
             adapter = "claude-code"
             max_turns = 12
+            travel_max_turns = 6
             "#,
         )
         .unwrap();
@@ -565,6 +610,7 @@ mod tests {
                 max_turns: 12,
                 command: None,
                 experimental: false,
+                travel_max_turns: 6,
             }
         );
     }
@@ -666,6 +712,28 @@ mod tests {
         assert!(err.to_string().contains("command"), "{err}");
         let err = parse(&format!("{base}[agent]\nmax_turns = 0\n")).unwrap_err();
         assert!(err.to_string().contains("agent.max_turns is 0"), "{err}");
+    }
+
+    #[test]
+    fn the_travel_step_cap_defaults_to_15_and_cannot_be_zero() {
+        let base = "countries = [\"Belgium\"]\n[home]\ncity = \"Lyon\"\nairports = [\"LYS\"]\n";
+        let profile = parse(base).unwrap();
+        assert_eq!(profile.agent.travel_max_turns, 15);
+        assert_eq!(DEFAULT_TRAVEL_MAX_TURNS, 15);
+        let set = parse(&format!("{base}[agent]\ntravel_max_turns = 4\n")).unwrap();
+        assert_eq!(set.agent.travel_max_turns, 4);
+        assert_eq!(set.agent.max_turns, DEFAULT_MAX_TURNS);
+        let err = parse(&format!("{base}[agent]\ntravel_max_turns = 0\n")).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("agent.travel_max_turns is 0; the Agent needs at least one step"),
+            "{err}"
+        );
+        let negative = parse(&format!("{base}[agent]\ntravel_max_turns = -3\n")).unwrap_err();
+        assert!(
+            matches!(negative, ProfileError::Syntax { .. }),
+            "{negative}"
+        );
     }
 
     #[test]

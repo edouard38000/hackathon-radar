@@ -63,6 +63,16 @@ pub const MAX_ENTRIES: usize = 6;
 
 /// Composes the Alert for these Hackathons, soonest first, or `None` when there are none.
 pub fn compose(hackathons: &[Candidate], kind: AlertKind) -> Option<Composed> {
+    compose_with_trips(hackathons, kind, |_| None)
+}
+
+/// Like [`compose`], showing each Hackathon's way of getting there, such as
+/// `train ~2h` or `fly BRU→MUC`, when `trip` gives one.
+pub fn compose_with_trips(
+    hackathons: &[Candidate],
+    kind: AlertKind,
+    trip: impl Fn(&Candidate) -> Option<String>,
+) -> Option<Composed> {
     if hackathons.is_empty() {
         return None;
     }
@@ -84,7 +94,7 @@ pub fn compose(hackathons: &[Candidate], kind: AlertKind) -> Option<Composed> {
         AlertKind::Welcome => format!("hackathon-radar: welcome! {count} already {fit} you"),
         AlertKind::New => format!("hackathon-radar: {count} newly {fit} you"),
     };
-    let entries = listed.iter().map(|h| entry(h));
+    let entries = listed.iter().map(|h| entry(h, trip(h)));
     let waiting = hackathons.len() - listed.len();
     let more = (waiting > 0).then(|| format!("+ {waiting} more"));
     let text = std::iter::once(heading)
@@ -98,12 +108,15 @@ pub fn compose(hackathons: &[Candidate], kind: AlertKind) -> Option<Composed> {
     })
 }
 
-fn entry(hackathon: &Candidate) -> String {
+fn entry(hackathon: &Candidate, trip: Option<String>) -> String {
     let dates = format_dates(hackathon.start, hackathon.end);
-    let when_where = match &hackathon.city {
+    let mut when_where = match &hackathon.city {
         Some(city) => format!("{city}, {dates}"),
         None => dates,
     };
+    if let Some(trip) = trip {
+        when_where.push_str(&format!(" · {trip}"));
+    }
     let mut lines = vec![hackathon.name.clone(), when_where];
     lines.extend(hackathon.link.clone());
     lines.join("\n")
@@ -179,6 +192,28 @@ mod tests {
         assert_eq!(
             compose(&[hackathon], AlertKind::New).unwrap().alert.text,
             "hackathon-radar: 1 Hackathon newly fits you\n\nMystery Hack\n1 Dec 2026"
+        );
+    }
+
+    #[test]
+    fn an_entry_shows_its_trip() {
+        let hackathon = Candidate {
+            source: "test".into(),
+            source_key: "1".into(),
+            name: "Munich Hack".into(),
+            start: date(2026, 12, 5),
+            end: date(2026, 12, 6),
+            city: Some("Munich".into()),
+            location: None,
+            country: Some("Germany".into()),
+            link: None,
+        };
+        let composed = compose_with_trips(&[hackathon], AlertKind::New, |_| {
+            Some("fly BRU→MUC".to_owned())
+        });
+        assert_eq!(
+            composed.unwrap().alert.text,
+            "hackathon-radar: 1 Hackathon newly fits you\n\nMunich Hack\nMunich, 5–6 Dec 2026 · fly BRU→MUC"
         );
     }
 

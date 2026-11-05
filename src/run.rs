@@ -11,6 +11,7 @@ use crate::profile::Profile;
 use crate::rules;
 use crate::sources::Source;
 use crate::store::Store;
+use crate::travel;
 
 pub struct RunDeps<'a> {
     pub profile: &'a Profile,
@@ -45,6 +46,11 @@ pub struct RunOutcome {
     pub unjudged: usize,
     /// Why the Agent couldn't judge this Run, if it couldn't.
     pub agent_failure: Option<String>,
+    /// How many destination cities still wait for a travel estimate.
+    pub unestimated: usize,
+    /// Why the Agent's travel estimates failed this Run, if they did; those
+    /// cities are asked about again on the next Run.
+    pub travel_failure: Option<String>,
 }
 
 #[derive(Debug)]
@@ -73,6 +79,15 @@ pub fn run(deps: RunDeps<'_>, options: RunOptions) -> anyhow::Result<RunOutcome>
     let judged = judging::judge(deps.agent, deps.profile, deps.store, passed, today)?;
     let fitting = judged.fitting;
     deps.store.save_hackathons(&fitting, today)?;
+    // An Agent that just failed to judge isn't asked for travel estimates too.
+    let travelled = travel::plan(
+        deps.agent,
+        deps.profile,
+        deps.store,
+        &fitting,
+        today,
+        judged.failure.is_none(),
+    )?;
 
     // Until something has been Announced, the Alert is the Welcome Alert; either
     // way it only covers what no Alert has announced yet.
@@ -82,7 +97,9 @@ pub fn run(deps: RunDeps<'_>, options: RunOptions) -> anyhow::Result<RunOutcome>
         AlertKind::Welcome
     };
     let not_announced = deps.store.not_announced(&fitting)?;
-    let composed = alert::compose(&not_announced, kind);
+    let composed = alert::compose_with_trips(&not_announced, kind, |h| {
+        travelled.trip(h).map(|t| t.label.clone())
+    });
     let mut sent = false;
     if let Some(composed) = &composed
         && !options.dry_run
@@ -103,5 +120,7 @@ pub fn run(deps: RunDeps<'_>, options: RunOptions) -> anyhow::Result<RunOutcome>
         judged: judged.judged_now,
         unjudged: judged.unjudged,
         agent_failure: judged.failure,
+        unestimated: travelled.unestimated,
+        travel_failure: travelled.failure,
     })
 }

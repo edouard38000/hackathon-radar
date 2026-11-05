@@ -5,7 +5,8 @@
 //! the environment, `codex exec` itself picks it up; hackathon-radar neither
 //! removes it nor sets it, and never signs anyone in.
 //!
-//! Codex has no step cap of its own, so `agent.max_turns` doesn't apply to it;
+//! Codex has no step cap of its own, so neither `agent.max_turns` nor
+//! `agent.travel_max_turns` (a request's `step_cap`) applies to it;
 //! the time limit does.
 //!
 //! Experimental: the read-only lockdown below comes from OpenAI's docs and is
