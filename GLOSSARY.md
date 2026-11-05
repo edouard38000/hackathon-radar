@@ -9,7 +9,7 @@ One person's settings that decide which hackathons are for them and how they hea
 _Avoid_: Preferences, settings, config, account
 
 **Home**:
-The city a person travels from, with the airports they fly out of.
+The city and country a person travels from, with the airports they fly out of.
 _Avoid_: Location, origin, base
 
 **Countries**:
