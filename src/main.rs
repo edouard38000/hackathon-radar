@@ -181,12 +181,14 @@ fn schedule_command(args: ScheduleArgs) -> anyhow::Result<ExitCode> {
             let profile = Profile::load(&profile_path)?;
             let binary =
                 std::env::current_exe().context("could not find the path of this binary")?;
+            let run_path = scheduler::RunPath::from_env(std::env::var_os("PATH"));
             let job = ScheduledRun {
                 binary,
                 profile: profile_path,
                 db: db_path,
                 log,
                 schedule: profile.schedule,
+                path: run_path.value.clone(),
             };
             let installed = scheduler::install(&platform, &job, &mut runner)?;
             println!(
@@ -202,6 +204,18 @@ fn schedule_command(args: ScheduleArgs) -> anyhow::Result<ExitCode> {
                 println!("  {}", file.display());
             }
             println!("Each Run appends its output to {}.", job.log.display());
+            if run_path.defaulted {
+                println!(
+                    "PATH is not set in this shell, so Runs use {}.",
+                    run_path.value
+                );
+            } else {
+                println!("Runs use this shell's PATH, so they find the same tools you do.");
+            }
+            println!(
+                "If you install or move your Agent's CLI (claude, codex) later, run \
+                 `hackathon-radar schedule install` again to refresh the PATH."
+            );
             if matches!(platform, Platform::Systemd { .. }) {
                 println!(
                     "systemd only runs user timers while you are logged in; to keep Runs going \

@@ -22,6 +22,7 @@ pub const TIMER: &str = "hackathon-radar.timer";
 pub fn render_service(job: &ScheduledRun) -> anyhow::Result<String> {
     let exec: Vec<String> = job.command_line()?.iter().map(|a| exec_arg(a)).collect();
     let log = escape_specifiers(&job.log_text()?);
+    let path = environment_assignment("PATH", job.path_env()?);
     Ok(format!(
         "[Unit]\n\
          Description=hackathon-radar Run\n\
@@ -29,6 +30,7 @@ pub fn render_service(job: &ScheduledRun) -> anyhow::Result<String> {
          \n\
          [Service]\n\
          Type=oneshot\n\
+         Environment={path}\n\
          ExecStart={}\n\
          StandardOutput=append:{log}\n\
          StandardError=append:{log}\n",
@@ -78,6 +80,16 @@ fn short_day(day: Weekday) -> &'static str {
 /// systemd expands `%` specifiers in most settings; `%%` is a literal `%`.
 fn escape_specifiers(text: &str) -> String {
     text.replace('%', "%%")
+}
+
+/// One quoted `Environment=` assignment, such as `"PATH=/usr/bin:/bin"`. systemd
+/// expands specifiers there but not `$` variables, so only `%` is doubled.
+fn environment_assignment(name: &str, value: &str) -> String {
+    let assignment = escape_specifiers(&format!("{name}={value}"));
+    format!(
+        "\"{}\"",
+        assignment.replace('\\', "\\\\").replace('"', "\\\"")
+    )
 }
 
 /// One `ExecStart=` word: specifiers and `$` variables escaped, and quoted when
@@ -187,5 +199,17 @@ mod tests {
         assert_eq!(exec_arg("/home/ada/$HOME"), "/home/ada/$$HOME");
         assert_eq!(exec_arg("/a\"b\\c"), "\"/a\\\"b\\\\c\"");
         assert_eq!(exec_arg("/a;b"), "\"/a;b\"");
+    }
+
+    #[test]
+    fn environment_assignments_are_quoted_and_escaped() {
+        assert_eq!(
+            environment_assignment("PATH", "/usr/bin:/bin"),
+            "\"PATH=/usr/bin:/bin\""
+        );
+        assert_eq!(
+            environment_assignment("PATH", "/my bin/100%:/$x:/a\"b\\c"),
+            "\"PATH=/my bin/100%%:/$x:/a\\\"b\\\\c\""
+        );
     }
 }

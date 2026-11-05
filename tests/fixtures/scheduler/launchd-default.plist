@@ -13,6 +13,11 @@
 		<string>--db</string>
 		<string>/home/ada/.local/share/hackathon-radar/hackathon-radar.sqlite</string>
 	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/home/ada/.cargo/bin:/usr/local/bin:/usr/bin:/bin</string>
+	</dict>
 	<key>StartCalendarInterval</key>
 	<array>
 		<dict>

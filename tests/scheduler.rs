@@ -11,8 +11,8 @@ use tempfile::TempDir;
 
 use hackathon_radar::profile::Schedule;
 use hackathon_radar::scheduler::{
-    self, CommandOutput, CommandRunner, Installed, Platform, ScheduledRun, Uninstalled, launchd,
-    systemd,
+    self, CommandOutput, CommandRunner, Installed, Platform, RunPath, ScheduledRun, Uninstalled,
+    launchd, systemd,
 };
 
 const UID: u32 = 501;
@@ -40,6 +40,7 @@ fn default_job() -> ScheduledRun {
         db: "/home/ada/.local/share/hackathon-radar/hackathon-radar.sqlite".into(),
         log: "/home/ada/.local/state/hackathon-radar/run.log".into(),
         schedule: Schedule::default(),
+        path: "/home/ada/.cargo/bin:/usr/local/bin:/usr/bin:/bin".into(),
     }
 }
 
@@ -51,6 +52,7 @@ fn custom_job() -> ScheduledRun {
         db: "/home/ada/100% $data/radar.sqlite".into(),
         log: "/home/ada/logs/100% radar.log".into(),
         schedule: custom_schedule(),
+        path: "/home/ada/my tools/100%:/opt/$x & <y>/bin:/usr/bin".into(),
     }
 }
 
@@ -202,6 +204,59 @@ fn renders_the_systemd_units_for_a_custom_schedule() {
         systemd::on_calendar(&job.schedule),
         "Wed,Sun *-*-* 21:45:00"
     );
+}
+
+#[test]
+fn without_a_shell_path_runs_get_the_platform_default() {
+    for from_env in [None, Some("".into())] {
+        let run_path = RunPath::from_env(from_env);
+        assert!(run_path.defaulted);
+        assert_eq!(run_path.value, scheduler::default_path());
+        let job = ScheduledRun {
+            path: run_path.value,
+            ..default_job()
+        };
+        let fallback = scheduler::default_path();
+        assert!(launchd::render_plist(&job).unwrap().contains(&format!(
+            "\t<key>EnvironmentVariables</key>\n\t<dict>\n\
+                 \t\t<key>PATH</key>\n\t\t<string>{fallback}</string>\n\t</dict>\n"
+        )));
+        assert!(
+            systemd::render_service(&job)
+                .unwrap()
+                .contains(&format!("\nEnvironment=\"PATH={fallback}\"\n"))
+        );
+    }
+    let expected = if cfg!(target_os = "macos") {
+        "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
+    } else {
+        "/usr/local/bin:/usr/bin:/bin"
+    };
+    assert_eq!(scheduler::default_path(), expected);
+}
+
+#[test]
+fn reinstalling_refreshes_the_path() {
+    let tmp = TempDir::new().unwrap();
+    let mut system = FakeSystem::new(&tmp);
+    for platform in [launchd_platform(&tmp), systemd_platform(&tmp)] {
+        scheduler::install(&platform, &job_in(&tmp, Schedule::default()), &mut system).unwrap();
+        let refreshed = ScheduledRun {
+            path: "/home/ada/.local/bin:/usr/bin:/bin".into(),
+            ..job_in(&tmp, Schedule::default())
+        };
+        scheduler::install(&platform, &refreshed, &mut system).unwrap();
+        let file = match &platform {
+            Platform::Launchd { agents_dir, .. } => agents_dir.join(PLIST),
+            Platform::Systemd { unit_dir } => unit_dir.join("hackathon-radar.service"),
+        };
+        let written = std::fs::read_to_string(file).unwrap();
+        assert!(
+            written.contains("/home/ada/.local/bin:/usr/bin:/bin"),
+            "{written}"
+        );
+        assert!(!written.contains("/home/ada/.cargo/bin:"), "{written}");
+    }
 }
 
 #[test]

@@ -13,6 +13,11 @@
 		<string>--db</string>
 		<string>/home/ada/100% $data/radar.sqlite</string>
 	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/home/ada/my tools/100%:/opt/$x &amp; &lt;y&gt;/bin:/usr/bin</string>
+	</dict>
 	<key>StartCalendarInterval</key>
 	<array>
 		<dict>

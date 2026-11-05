@@ -32,9 +32,62 @@ pub struct ScheduledRun {
     /// Where each Run's stdout and stderr are appended.
     pub log: PathBuf,
     pub schedule: Schedule,
+    /// The `PATH` each Run gets, so it finds the Agent's CLI (`claude`, `codex`):
+    /// launchd and systemd otherwise start jobs with a minimal one.
+    pub path: String,
+}
+
+/// The `PATH` used when the installing shell has none.
+pub const MACOS_DEFAULT_PATH: &str = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin";
+/// The `PATH` used when the installing shell has none.
+pub const LINUX_DEFAULT_PATH: &str = "/usr/local/bin:/usr/bin:/bin";
+
+/// The fallback `PATH` for this platform.
+pub fn default_path() -> &'static str {
+    if cfg!(target_os = "macos") {
+        MACOS_DEFAULT_PATH
+    } else {
+        LINUX_DEFAULT_PATH
+    }
+}
+
+/// The `PATH` for scheduled Runs, taken from the installing shell's `PATH`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunPath {
+    pub value: String,
+    /// True when the shell's `PATH` was unset, empty or not UTF-8, so
+    /// [`default_path`] is used instead.
+    pub defaulted: bool,
+}
+
+impl RunPath {
+    /// `from_env` is the installing shell's `PATH`, such as `std::env::var_os("PATH")`.
+    pub fn from_env(from_env: Option<std::ffi::OsString>) -> Self {
+        match from_env
+            .and_then(|p| p.into_string().ok())
+            .filter(|p| !p.trim().is_empty())
+        {
+            Some(value) => RunPath {
+                value,
+                defaulted: false,
+            },
+            None => RunPath {
+                value: default_path().to_owned(),
+                defaulted: true,
+            },
+        }
+    }
 }
 
 impl ScheduledRun {
+    /// The `PATH` as text the scheduler files can hold: on one line.
+    pub fn path_env(&self) -> anyhow::Result<&str> {
+        if self.path.chars().any(char::is_control) {
+            bail!("PATH {:?} contains a control character", self.path);
+        }
+        Ok(&self.path)
+    }
+
     /// The program and its arguments: `<binary> run --profile <profile> --db <db>`.
     pub fn command_line(&self) -> anyhow::Result<Vec<String>> {
         Ok(vec![
@@ -264,6 +317,35 @@ mod tests {
         assert!(!is_cargo_build_output(Path::new(
             "/home/ada/.cargo/bin/hackathon-radar"
         )));
+    }
+
+    #[test]
+    fn run_path_comes_from_the_installing_shell() {
+        assert_eq!(
+            RunPath::from_env(Some("/home/ada/.local/bin:/usr/bin".into())),
+            RunPath {
+                value: "/home/ada/.local/bin:/usr/bin".into(),
+                defaulted: false,
+            }
+        );
+    }
+
+    #[test]
+    fn an_unset_or_empty_path_falls_back_to_the_platform_default() {
+        let expected = if cfg!(target_os = "macos") {
+            "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
+        } else {
+            "/usr/local/bin:/usr/bin:/bin"
+        };
+        for from_env in [None, Some("".into()), Some("  ".into())] {
+            assert_eq!(
+                RunPath::from_env(from_env),
+                RunPath {
+                    value: expected.into(),
+                    defaulted: true,
+                }
+            );
+        }
     }
 
     #[test]

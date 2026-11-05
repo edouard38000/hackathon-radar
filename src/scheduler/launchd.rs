@@ -33,7 +33,15 @@ pub fn render_plist(job: &ScheduledRun) -> anyhow::Result<String> {
     for arg in job.command_line()? {
         let _ = writeln!(out, "\t\t<string>{}</string>", xml_escape(&arg));
     }
-    out.push_str("\t</array>\n\t<key>StartCalendarInterval</key>\n\t<array>\n");
+    out.push_str("\t</array>\n");
+    let _ = writeln!(
+        out,
+        "\t<key>EnvironmentVariables</key>\n\t<dict>\n\
+         \t\t<key>PATH</key>\n\t\t<string>{}</string>\n\
+         \t</dict>",
+        xml_escape(job.path_env()?)
+    );
+    out.push_str("\t<key>StartCalendarInterval</key>\n\t<array>\n");
     for day in &job.schedule.days {
         let _ = writeln!(
             out,

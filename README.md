@@ -33,6 +33,8 @@ hackathon-radar schedule status
 hackathon-radar schedule uninstall
 ```
 
+launchd and systemd give scheduled jobs only a minimal `PATH`, so `schedule install` saves your shell's `PATH` into the schedule; that is how a Run finds your Agent's CLI (`claude`, `codex`). If your shell has no `PATH`, it falls back to `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin` on macOS or `/usr/local/bin:/usr/bin:/bin` on Linux. If you install or move a tool later, run `schedule install` again to refresh it.
+
 The schedule runs the binary you installed it from, so install the binary first (`cargo install --path .`) rather than scheduling a `target/` build. On Linux, systemd only runs user timers while you're logged in unless you enable lingering (`loginctl enable-linger`).
 
 ## Development
