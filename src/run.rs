@@ -2,7 +2,7 @@
 //! sends at most one Alert. Everything it touches is passed in, so tests can
 //! drive a whole Run with fakes.
 
-use crate::alert::{self, Alert, AlertChannel};
+use crate::alert::{self, Alert, AlertChannel, AlertKind};
 use crate::candidate::Candidate;
 use crate::clock::Clock;
 use crate::profile::Profile;
@@ -63,12 +63,22 @@ pub fn run(deps: RunDeps<'_>, options: RunOptions) -> anyhow::Result<RunOutcome>
     let fitting = rules::apply(candidates, deps.profile, today);
     deps.store.save_hackathons(&fitting, today)?;
 
-    let alert = alert::compose(&fitting);
+    // Until something has been Announced, the Alert is the Welcome Alert; either
+    // way it only covers what no Alert has announced yet.
+    let kind = if deps.store.has_announced_anything()? {
+        AlertKind::New
+    } else {
+        AlertKind::Welcome
+    };
+    let to_announce = deps.store.not_announced(&fitting)?;
+    let alert = alert::compose(&to_announce, kind);
     let mut sent = false;
     if let Some(alert) = &alert
         && !options.dry_run
     {
         deps.channel.send(alert)?;
+        // Those counted in "+ X more" were announced too, so they never come back.
+        deps.store.mark_announced(&to_announce, today)?;
         sent = true;
     }
 

@@ -6,7 +6,7 @@ use hackathon_radar::candidate::Candidate;
 use support::*;
 
 const ALERT_ON_9_NOV_2026: &str = "\
-hackathon-radar: 5 Hackathons fit you
+hackathon-radar: welcome! 5 Hackathons already fit you
 
 Odoo Hackathon #6
 Ramillies, 20–22 Nov 2026

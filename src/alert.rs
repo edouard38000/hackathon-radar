@@ -1,5 +1,7 @@
 //! Alerts: composing the text a person receives, and the channel it goes out on.
 
+pub mod ntfy;
+
 use chrono::{Datelike, NaiveDate};
 
 use crate::candidate::Candidate;
@@ -14,21 +16,43 @@ pub trait AlertChannel {
     fn send(&mut self, alert: &Alert) -> anyhow::Result<()>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlertKind {
+    /// The first Alert, listing what already Fits when tracking starts.
+    Welcome,
+    /// Every later Alert, about Hackathons that newly Fit.
+    New,
+}
+
+/// An Alert lists at most this many Hackathons and counts the rest, so it stays readable on a phone.
+pub const MAX_ENTRIES: usize = 6;
+
 /// Composes the Alert for these Hackathons, soonest first, or `None` when there are none.
-pub fn compose(fitting: &[Candidate]) -> Option<Alert> {
-    if fitting.is_empty() {
+pub fn compose(hackathons: &[Candidate], kind: AlertKind) -> Option<Alert> {
+    if hackathons.is_empty() {
         return None;
     }
-    let mut hackathons: Vec<&Candidate> = fitting.iter().collect();
+    let mut hackathons: Vec<&Candidate> = hackathons.iter().collect();
     hackathons.sort_by(|a, b| (a.start, &a.name).cmp(&(b.start, &b.name)));
 
-    let heading = match hackathons.len() {
-        1 => "hackathon-radar: 1 Hackathon fits you".to_owned(),
-        n => format!("hackathon-radar: {n} Hackathons fit you"),
+    let count = match hackathons.len() {
+        1 => "1 Hackathon".to_owned(),
+        n => format!("{n} Hackathons"),
     };
-    let entries = hackathons.iter().map(|h| entry(h));
+    let fit = if hackathons.len() == 1 { "fits" } else { "fit" };
+    let heading = match kind {
+        AlertKind::Welcome => format!("hackathon-radar: welcome! {count} already {fit} you"),
+        AlertKind::New => format!("hackathon-radar: {count} newly {fit} you"),
+    };
+    let entries = hackathons.iter().take(MAX_ENTRIES).map(|h| entry(h));
+    let more = hackathons
+        .len()
+        .checked_sub(MAX_ENTRIES)
+        .filter(|&n| n > 0)
+        .map(|n| format!("+ {n} more"));
     let text = std::iter::once(heading)
         .chain(entries)
+        .chain(more)
         .collect::<Vec<_>>()
         .join("\n\n");
     Some(Alert { text })
@@ -95,7 +119,8 @@ mod tests {
 
     #[test]
     fn nothing_to_compose_means_no_alert() {
-        assert_eq!(compose(&[]), None);
+        assert_eq!(compose(&[], AlertKind::Welcome), None);
+        assert_eq!(compose(&[], AlertKind::New), None);
     }
 
     #[test]
@@ -112,8 +137,8 @@ mod tests {
             link: None,
         };
         assert_eq!(
-            compose(&[hackathon]).unwrap().text,
-            "hackathon-radar: 1 Hackathon fits you\n\nMystery Hack\n1 Dec 2026"
+            compose(&[hackathon], AlertKind::New).unwrap().text,
+            "hackathon-radar: 1 Hackathon newly fits you\n\nMystery Hack\n1 Dec 2026"
         );
     }
 }

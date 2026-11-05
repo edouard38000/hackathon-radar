@@ -1,0 +1,8 @@
+POST https://ntfy.example.org/radar
+Content-Type: text/plain; charset=utf-8
+Authorization: Bearer tk_fixture_not_a_real_token
+
+hackathon-radar: 1 Hackathon newly fits you
+
+Mystery Hack
+1 Dec 2026

@@ -4,10 +4,11 @@ use std::process::ExitCode;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 
+use hackathon_radar::alert::ntfy::{self, NtfyChannel};
 use hackathon_radar::alert::{Alert, AlertChannel};
 use hackathon_radar::clock::SystemClock;
 use hackathon_radar::http::HttpClient;
-use hackathon_radar::profile::Profile;
+use hackathon_radar::profile::{AlertChannelSetting, Profile};
 use hackathon_radar::run::{self, RunDeps, RunOptions};
 use hackathon_radar::sources::Source;
 use hackathon_radar::sources::hackathon_be::HackathonBe;
@@ -67,6 +68,7 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
     let profile = Profile::load(&profile_path)?;
     let mut store = Store::open(&db_path)?;
     let sources: Vec<Box<dyn Source>> = vec![Box::new(HackathonBe::new(HttpClient::new()))];
+    let mut channel = alert_channel(&profile);
 
     let outcome = run::run(
         RunDeps {
@@ -74,7 +76,7 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
             sources: &sources,
             clock: &SystemClock,
             store: &mut store,
-            channel: &mut PrintChannel,
+            channel: channel.as_mut(),
         },
         RunOptions {
             dry_run: args.dry_run,
@@ -103,7 +105,9 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
             None => println!("\nDry run: nothing to send."),
         }
     } else if outcome.alert.is_none() {
-        println!("\nNothing to send.");
+        println!("\nNothing new to send.");
+    } else if let Some(AlertChannelSetting::Ntfy(_)) = &profile.alert_channel {
+        println!("\nSent the Alert through ntfy.");
     }
 
     // Every Source failing means the Run learnt nothing, which a scheduler should see.
@@ -115,13 +119,26 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
     })
 }
 
-/// Stands in for a real Alert channel until one is configured: it prints and sends nothing.
+/// The Alert channel the Profile names, or printing when it names none.
+fn alert_channel(profile: &Profile) -> Box<dyn AlertChannel> {
+    match &profile.alert_channel {
+        Some(AlertChannelSetting::Ntfy(setting)) => Box::new(NtfyChannel::new(
+            setting.clone(),
+            ntfy::token_from_env(),
+            HttpClient::new(),
+        )),
+        None => Box::new(PrintChannel),
+    }
+}
+
+/// Stands in for an Alert channel when the Profile has none: it prints and sends nothing.
+/// What it prints counts as announced, since the person running it has read it.
 struct PrintChannel;
 
 impl AlertChannel for PrintChannel {
     fn send(&mut self, alert: &Alert) -> anyhow::Result<()> {
         println!(
-            "\nNo Alert channel is set up yet, so the Alert is printed here and not sent:\n\n{}",
+            "\nThe Profile has no Alert channel, so the Alert is printed here and not sent:\n\n{}",
             alert.text
         );
         Ok(())

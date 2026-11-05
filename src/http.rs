@@ -51,3 +51,34 @@ impl HttpGet for HttpClient {
             .with_context(|| format!("fetching {url}"))
     }
 }
+
+/// A POST with a text body, spelt out so a test can compare it with a recorded request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PostRequest {
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: String,
+}
+
+/// Sends a POST. Alert channels take one so tests can record the request instead.
+pub trait HttpPost {
+    fn post(&self, request: &PostRequest) -> anyhow::Result<()>;
+}
+
+impl<T: HttpPost + ?Sized> HttpPost for &T {
+    fn post(&self, request: &PostRequest) -> anyhow::Result<()> {
+        (**self).post(request)
+    }
+}
+
+impl HttpPost for HttpClient {
+    fn post(&self, request: &PostRequest) -> anyhow::Result<()> {
+        let mut builder = self.agent.post(&request.url);
+        for (name, value) in &request.headers {
+            builder = builder.header(name, value);
+        }
+        // The URL stays out of the error: for ntfy it holds the topic, which works like a password.
+        builder.send(&request.body)?;
+        Ok(())
+    }
+}

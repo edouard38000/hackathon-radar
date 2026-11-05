@@ -10,7 +10,8 @@ use crate::candidate::Candidate;
 
 /// Applied in order; `PRAGMA user_version` records how many have run.
 /// Later changes append a migration and never edit an earlier one.
-const MIGRATIONS: &[&str] = &["CREATE TABLE hackathons (
+const MIGRATIONS: &[&str] = &[
+    "CREATE TABLE hackathons (
         id          INTEGER PRIMARY KEY,
         source      TEXT NOT NULL,
         source_key  TEXT NOT NULL,
@@ -24,7 +25,10 @@ const MIGRATIONS: &[&str] = &["CREATE TABLE hackathons (
         first_seen  TEXT NOT NULL,
         last_seen   TEXT NOT NULL,
         UNIQUE (source, source_key)
-    );"];
+    );",
+    // The day an Alert first told the person about the Hackathon; NULL until then.
+    "ALTER TABLE hackathons ADD COLUMN announced_on TEXT;",
+];
 
 /// A Hackathon as stored.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +46,8 @@ pub struct Hackathon {
     pub first_seen: NaiveDate,
     /// The day of the latest Run that still found it.
     pub last_seen: NaiveDate,
+    /// The day an Alert announced it, if one has.
+    pub announced_on: Option<NaiveDate>,
 }
 
 pub struct Store {
@@ -127,7 +133,7 @@ impl Store {
     pub fn hackathons(&self) -> anyhow::Result<Vec<Hackathon>> {
         let mut query = self.conn.prepare(
             "SELECT source, source_key, name, start_date, end_date, city, location, country, link,
-                    first_seen, last_seen
+                    first_seen, last_seen, announced_on
              FROM hackathons
              ORDER BY start_date, name, source, source_key",
         )?;
@@ -144,8 +150,89 @@ impl Store {
                 link: row.get(8)?,
                 first_seen: row.get(9)?,
                 last_seen: row.get(10)?,
+                announced_on: row.get(11)?,
             })
         })?;
         Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Whether any Alert has announced anything yet; until one has, the next Alert is the Welcome Alert.
+    pub fn has_announced_anything(&self) -> anyhow::Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS (SELECT 1 FROM hackathons WHERE announced_on IS NOT NULL)",
+            [],
+            |row| row.get(0),
+        )?)
+    }
+
+    /// The ones among `found` that no Alert has announced, in the same order.
+    /// A listing that isn't stored counts as not announced.
+    pub fn not_announced(&self, found: &[Candidate]) -> anyhow::Result<Vec<Candidate>> {
+        let mut announced = self.conn.prepare(
+            "SELECT EXISTS (
+                SELECT 1 FROM hackathons
+                WHERE source = ?1 AND source_key = ?2 AND announced_on IS NOT NULL
+             )",
+        )?;
+        let mut fresh = Vec::new();
+        for c in found {
+            let is_announced: bool =
+                announced.query_row(params![c.source, c.source_key], |row| row.get(0))?;
+            if !is_announced {
+                fresh.push(c.clone());
+            }
+        }
+        Ok(fresh)
+    }
+
+    /// Marks each stored Hackathon as Announced on `day`, keeping the day of an earlier Alert.
+    pub fn mark_announced(
+        &mut self,
+        hackathons: &[Candidate],
+        day: NaiveDate,
+    ) -> anyhow::Result<()> {
+        let tx = self.conn.transaction()?;
+        {
+            let mut mark = tx.prepare(
+                "UPDATE hackathons SET announced_on = ?3
+                 WHERE source = ?1 AND source_key = ?2 AND announced_on IS NULL",
+            )?;
+            for c in hackathons {
+                mark.execute(params![c.source, c.source_key, day])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_database_from_before_announced_flags_is_upgraded_in_place() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("old.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(MIGRATIONS[0]).unwrap();
+            conn.pragma_update(None, "user_version", 1).unwrap();
+            conn.execute(
+                "INSERT INTO hackathons (source, source_key, name, start_date, end_date,
+                                         first_seen, last_seen)
+                 VALUES ('s', 'k', 'Old Hack', '2026-12-01', '2026-12-02',
+                         '2026-11-01', '2026-11-01')",
+                [],
+            )
+            .unwrap();
+        }
+
+        let store = Store::open(&path).unwrap();
+
+        let stored = store.hackathons().unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].announced_on, None);
+        assert!(!store.has_announced_anything().unwrap());
     }
 }
