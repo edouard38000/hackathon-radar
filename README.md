@@ -42,8 +42,10 @@ The schedule runs the binary you installed it from, so install the binary first 
 Each Run sends the listings that passed the Profile's rules to [Claude Code](https://claude.com/claude-code), run headless on your own `claude` login (or `ANTHROPIC_API_KEY`, if you set it). hackathon-radar never signs you in; if `claude` isn't signed in, run `claude` once yourself. The Agent may only search and read the web:
 
 ```sh
-claude -p --permission-mode dontAsk --allowedTools WebSearch,WebFetch --max-turns <cap> --output-format json --json-schema <schema>
+claude -p --permission-mode dontAsk --tools WebSearch,WebFetch --allowedTools WebSearch,WebFetch --strict-mcp-config --setting-sources "" --max-turns <cap> --output-format json --json-schema <schema>
 ```
+
+It loads none of your Claude Code settings, hooks or MCP servers, so nothing you've allowed for your own work applies to it.
 
 The prompt goes on stdin. The prompt and schema are built into hackathon-radar, and its answer is checked against the schema; if the Agent fails or answers in the wrong shape, the listings are kept and sent again on the next Run. The step cap is `agent.max_turns` in your Profile (50 by default), and `[eligibility]` holds the facts organisers restrict on.
 

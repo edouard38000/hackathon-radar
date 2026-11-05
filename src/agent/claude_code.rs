@@ -39,15 +39,26 @@ impl<R: ProcessRunner> ClaudeCode<R> {
         }
     }
 
-    /// The whole argument list. It allows web search and page reading only, and
-    /// never bypasses permissions: `dontAsk` refuses any tool not listed.
+    /// The whole argument list (ADR 0004). The session has web search and page
+    /// reading and nothing else, and never bypasses permissions:
+    ///
+    /// - `--tools` makes those two the only built-in tools that exist, and
+    ///   `--allowedTools` approves them; `dontAsk` refuses anything else.
+    /// - `--strict-mcp-config` without `--mcp-config` loads no MCP servers.
+    /// - `--setting-sources ""` loads no user, project or local settings, so the
+    ///   person's own allow rules and hooks don't apply. Their sign-in still does.
     pub fn args(&self, schema: &str) -> Vec<String> {
         [
             "-p",
             "--permission-mode",
             "dontAsk",
+            "--tools",
+            ALLOWED_TOOLS,
             "--allowedTools",
             ALLOWED_TOOLS,
+            "--strict-mcp-config",
+            "--setting-sources",
+            "",
             "--max-turns",
             &self.max_turns.to_string(),
             "--output-format",

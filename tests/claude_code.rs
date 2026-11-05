@@ -94,8 +94,13 @@ fn runs_claude_headless_with_web_search_and_page_reading_only() {
             "-p",
             "--permission-mode",
             "dontAsk",
+            "--tools",
+            "WebSearch,WebFetch",
             "--allowedTools",
             "WebSearch,WebFetch",
+            "--strict-mcp-config",
+            "--setting-sources",
+            "",
             "--max-turns",
             "37",
             "--output-format",
@@ -130,12 +135,14 @@ fn never_passes_a_bypass_or_a_write_permission() {
         "--allow-dangerously-skip-permissions",
         "acceptEdits",
         "--add-dir",
+        "--mcp-config",
+        "--bare",
         "Bash",
         "Write",
         "Edit",
         "NotebookEdit",
     ];
-    for arg in args.iter().filter(|a| a.as_str() != SCHEMA) {
+    for arg in args {
         for word in forbidden {
             assert!(!arg.contains(word), "{arg:?} contains {word:?}");
         }
@@ -150,6 +157,26 @@ fn never_passes_a_bypass_or_a_write_permission() {
             .count(),
         1
     );
+}
+
+#[test]
+fn the_persons_own_settings_hooks_and_mcp_servers_are_shut_out() {
+    let runner = FakeRunner::printing(&fixture("claude-code/success.json"), 0);
+    ask(&runner, DEFAULT_MAX_TURNS).unwrap();
+
+    let args = &runner.commands.borrow()[0].args;
+    let value_of = |flag: &str| {
+        let at = args.iter().position(|a| a == flag);
+        at.map(|i| args[i + 1].as_str())
+    };
+    // Only web search and page reading exist in the session, not merely are approved.
+    assert_eq!(value_of("--tools"), Some("WebSearch,WebFetch"));
+    // No user, project or local settings: none of their allow rules or hooks.
+    assert_eq!(value_of("--setting-sources"), Some(""));
+    // No MCP servers: strict, with no --mcp-config to take them from.
+    assert!(args.iter().any(|a| a == "--strict-mcp-config"));
+    assert!(!args.iter().any(|a| a.starts_with("--mcp-config")));
+    assert!(!args.iter().any(|a| a.starts_with("--settings")));
 }
 
 #[test]
