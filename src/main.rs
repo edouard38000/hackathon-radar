@@ -5,7 +5,7 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 
 use hackathon_radar::alert::ntfy::{self, NtfyChannel};
-use hackathon_radar::alert::{Alert, AlertChannel};
+use hackathon_radar::alert::{AlertChannel, PrintChannel};
 use hackathon_radar::clock::SystemClock;
 use hackathon_radar::http::HttpClient;
 use hackathon_radar::profile::{AlertChannelSetting, Profile};
@@ -128,19 +128,5 @@ fn alert_channel(profile: &Profile) -> Box<dyn AlertChannel> {
             HttpClient::new(),
         )),
         None => Box::new(PrintChannel),
-    }
-}
-
-/// Stands in for an Alert channel when the Profile has none: it prints and sends nothing.
-/// What it prints counts as announced, since the person running it has read it.
-struct PrintChannel;
-
-impl AlertChannel for PrintChannel {
-    fn send(&mut self, alert: &Alert) -> anyhow::Result<()> {
-        println!(
-            "\nThe Profile has no Alert channel, so the Alert is printed here and not sent:\n\n{}",
-            alert.text
-        );
-        Ok(())
     }
 }

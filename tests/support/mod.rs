@@ -94,11 +94,13 @@ impl Source for FakeSource {
 }
 
 /// Records each Alert instead of sending it, or fails like an unreachable channel
-/// while `fail_with` is set.
+/// while `fail_with` is set. With `print_only`, it behaves like the print
+/// fallback: Alerts are recorded but reach no one.
 #[derive(Default)]
 pub struct RecordingChannel {
     pub sent: Vec<Alert>,
     pub fail_with: Option<String>,
+    pub print_only: bool,
 }
 
 impl AlertChannel for RecordingChannel {
@@ -108,6 +110,10 @@ impl AlertChannel for RecordingChannel {
         }
         self.sent.push(alert.clone());
         Ok(())
+    }
+
+    fn reaches_the_person(&self) -> bool {
+        !self.print_only
     }
 }
 

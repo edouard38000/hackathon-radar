@@ -70,15 +70,16 @@ pub fn run(deps: RunDeps<'_>, options: RunOptions) -> anyhow::Result<RunOutcome>
     } else {
         AlertKind::Welcome
     };
-    let to_announce = deps.store.not_announced(&fitting)?;
-    let alert = alert::compose(&to_announce, kind);
+    let not_announced = deps.store.not_announced(&fitting)?;
+    let composed = alert::compose(&not_announced, kind);
     let mut sent = false;
-    if let Some(alert) = &alert
+    if let Some(composed) = &composed
         && !options.dry_run
     {
-        deps.channel.send(alert)?;
-        // Those counted in "+ X more" were announced too, so they never come back.
-        deps.store.mark_announced(&to_announce, today)?;
+        deps.channel.send(&composed.alert)?;
+        if deps.channel.reaches_the_person() {
+            deps.store.mark_announced(&composed.announces, today)?;
+        }
         sent = true;
     }
 
@@ -86,7 +87,7 @@ pub fn run(deps: RunDeps<'_>, options: RunOptions) -> anyhow::Result<RunOutcome>
         collected,
         fitting,
         failed_sources,
-        alert,
+        alert: composed.map(|c| c.alert),
         sent,
     })
 }

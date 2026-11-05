@@ -165,7 +165,82 @@ fn later_alerts_are_capped_at_6_too() {
     );
     assert!(later.ends_with("\n\n+ 1 more"), "{later}");
     assert!(!later.contains("N7"), "{later}");
+    // N7 was only counted, never shown, so it isn't Announced yet.
+    assert_eq!(harness.announced_names(), &names[..7]);
+}
+
+#[test]
+fn a_backlog_of_new_hackathons_drains_6_per_run_and_none_is_lost() {
+    let mut harness = Harness::new(profile(&["Belgium"]));
+    harness.run(&listing(&["Welcome Hack"]), date(2026, 11, 9), LIVE_RUN);
+
+    let names = [
+        "Welcome Hack",
+        "N1",
+        "N2",
+        "N3",
+        "N4",
+        "N5",
+        "N6",
+        "N7",
+        "N8",
+    ];
+    harness.run(&listing(&names), date(2026, 11, 12), LIVE_RUN);
+    let first = harness.channel.sent[1].text.clone();
+    assert!(
+        first.starts_with("hackathon-radar: 8 Hackathons newly fit you\n\nN1\n"),
+        "{first}"
+    );
+    assert!(first.contains("\n\nN6\n"), "{first}");
+    assert!(first.ends_with("\n\n+ 2 more"), "{first}");
+    assert!(!first.contains("N7") && !first.contains("N8"), "{first}");
+    assert_eq!(harness.announced_names(), &names[..7]);
+
+    harness.run(&listing(&names), date(2026, 11, 16), LIVE_RUN);
+    assert_eq!(
+        harness.channel.sent[2].text,
+        "hackathon-radar: 2 Hackathons newly fit you
+
+N7
+Ghent, 8 Dec 2026
+https://example.org/N7
+
+N8
+Ghent, 9 Dec 2026
+https://example.org/N8"
+    );
     assert_eq!(harness.announced_names(), names);
+
+    let after = harness.run(&listing(&names), date(2026, 11, 19), LIVE_RUN);
+    assert_eq!(after.alert, None);
+    assert_eq!(harness.channel.sent.len(), 3);
+}
+
+#[test]
+fn printing_without_an_alert_channel_announces_nothing() {
+    let mut harness = Harness::new(profile(&["Belgium"]));
+    harness.channel.print_only = true;
+
+    let printed = harness.run(&listing(&["Ghent Hack"]), date(2026, 11, 9), LIVE_RUN);
+    assert_eq!(harness.channel.sent.len(), 1, "the Alert is still printed");
+    assert!(
+        printed
+            .alert
+            .unwrap()
+            .text
+            .starts_with("hackathon-radar: welcome! 1 Hackathon already fits you")
+    );
+    assert!(harness.announced_names().is_empty());
+
+    // Once an Alert channel is set, the person still gets the Welcome Alert.
+    harness.channel.print_only = false;
+    harness.run(&listing(&["Ghent Hack"]), date(2026, 11, 12), LIVE_RUN);
+    assert!(
+        harness.channel.sent[1]
+            .text
+            .starts_with("hackathon-radar: welcome!")
+    );
+    assert_eq!(harness.announced_names(), ["Ghent Hack"]);
 }
 
 #[test]

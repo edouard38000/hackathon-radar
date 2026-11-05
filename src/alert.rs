@@ -14,6 +14,40 @@ pub struct Alert {
 /// Where Alerts go. Each Alert channel (ntfy, Photon) implements this.
 pub trait AlertChannel {
     fn send(&mut self, alert: &Alert) -> anyhow::Result<()>;
+
+    /// Whether a sent Alert reaches the person. Only then do its Hackathons become Announced.
+    fn reaches_the_person(&self) -> bool {
+        true
+    }
+}
+
+/// Stands in for an Alert channel when the Profile has none. It prints the
+/// Alert, which reaches no one on a schedule, so nothing it prints is Announced.
+pub struct PrintChannel;
+
+impl AlertChannel for PrintChannel {
+    fn send(&mut self, alert: &Alert) -> anyhow::Result<()> {
+        println!(
+            "\nThe Profile has no Alert channel, so the Alert is printed here and not sent:\n\n{}\n\n\
+             To receive Alerts, add an [alert_channel] section to the Profile (see examples/profile.toml).",
+            alert.text
+        );
+        Ok(())
+    }
+
+    fn reaches_the_person(&self) -> bool {
+        false
+    }
+}
+
+/// An Alert together with the Hackathons it announces once it reaches the person.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Composed {
+    pub alert: Alert,
+    /// A Welcome Alert announces everything that Fits, so later Alerts only
+    /// cover what's new. A later Alert announces only the entries it lists;
+    /// those counted in "+ X more" wait for the next Alert.
+    pub announces: Vec<Candidate>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,12 +62,18 @@ pub enum AlertKind {
 pub const MAX_ENTRIES: usize = 6;
 
 /// Composes the Alert for these Hackathons, soonest first, or `None` when there are none.
-pub fn compose(hackathons: &[Candidate], kind: AlertKind) -> Option<Alert> {
+pub fn compose(hackathons: &[Candidate], kind: AlertKind) -> Option<Composed> {
     if hackathons.is_empty() {
         return None;
     }
     let mut hackathons: Vec<&Candidate> = hackathons.iter().collect();
     hackathons.sort_by(|a, b| (a.start, &a.name).cmp(&(b.start, &b.name)));
+    let listed = &hackathons[..hackathons.len().min(MAX_ENTRIES)];
+    let announces = match kind {
+        AlertKind::Welcome => &hackathons[..],
+        AlertKind::New => listed,
+    };
+    let announces = announces.iter().map(|&h| h.clone()).collect();
 
     let count = match hackathons.len() {
         1 => "1 Hackathon".to_owned(),
@@ -44,18 +84,18 @@ pub fn compose(hackathons: &[Candidate], kind: AlertKind) -> Option<Alert> {
         AlertKind::Welcome => format!("hackathon-radar: welcome! {count} already {fit} you"),
         AlertKind::New => format!("hackathon-radar: {count} newly {fit} you"),
     };
-    let entries = hackathons.iter().take(MAX_ENTRIES).map(|h| entry(h));
-    let more = hackathons
-        .len()
-        .checked_sub(MAX_ENTRIES)
-        .filter(|&n| n > 0)
-        .map(|n| format!("+ {n} more"));
+    let entries = listed.iter().map(|h| entry(h));
+    let waiting = hackathons.len() - listed.len();
+    let more = (waiting > 0).then(|| format!("+ {waiting} more"));
     let text = std::iter::once(heading)
         .chain(entries)
         .chain(more)
         .collect::<Vec<_>>()
         .join("\n\n");
-    Some(Alert { text })
+    Some(Composed {
+        alert: Alert { text },
+        announces,
+    })
 }
 
 fn entry(hackathon: &Candidate) -> String {
@@ -137,8 +177,13 @@ mod tests {
             link: None,
         };
         assert_eq!(
-            compose(&[hackathon], AlertKind::New).unwrap().text,
+            compose(&[hackathon], AlertKind::New).unwrap().alert.text,
             "hackathon-radar: 1 Hackathon newly fits you\n\nMystery Hack\n1 Dec 2026"
         );
+    }
+
+    #[test]
+    fn printing_reaches_no_one() {
+        assert!(!PrintChannel.reaches_the_person());
     }
 }
