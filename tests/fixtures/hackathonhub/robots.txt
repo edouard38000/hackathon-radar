@@ -1,0 +1,25 @@
+User-agent: Googlebot
+Allow: /
+Disallow: /admin
+Disallow: /auth
+Disallow: /review
+Disallow: /profile
+
+# Blocked: scrapers without value for a European audience
+User-agent: Bytespider
+User-agent: Baiduspider
+Disallow: /
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /auth
+Disallow: /review
+Disallow: /partners
+Disallow: /partner
+Disallow: /profile
+Disallow: /reset-password
+Disallow: /unsubscribe
+Disallow: /newsletter
+
+Sitemap: https://hackathonhub.eu/sitemap.xml

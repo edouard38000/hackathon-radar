@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::rc::Rc;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
@@ -8,13 +9,18 @@ use hackathon_radar::agent;
 use hackathon_radar::alert::ntfy::{self, NtfyChannel};
 use hackathon_radar::alert::photon::{self, PhotonChannel};
 use hackathon_radar::alert::{AlertChannel, PrintChannel};
-use hackathon_radar::clock::SystemClock;
+use hackathon_radar::clock::{Clock, SystemClock};
 use hackathon_radar::http::HttpClient;
 use hackathon_radar::process::SystemRunner;
 use hackathon_radar::profile::{AlertChannelSetting, Profile};
 use hackathon_radar::run::{self, RunDeps, RunOptions};
 use hackathon_radar::sources::Source;
+use hackathon_radar::sources::calendar::IcsCalendar;
+use hackathon_radar::sources::devpost::Devpost;
 use hackathon_radar::sources::hackathon_be::HackathonBe;
+use hackathon_radar::sources::hackathonhub::{self, HackathonHub};
+use hackathon_radar::sources::luma::{self, LumaCalendar};
+use hackathon_radar::sources::polite::PoliteHttp;
 use hackathon_radar::{paths, store::Store};
 
 #[derive(Parser)]
@@ -73,7 +79,7 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
     };
     let profile = Profile::load(&profile_path)?;
     let mut store = Store::open(&db_path)?;
-    let sources: Vec<Box<dyn Source>> = vec![Box::new(HackathonBe::new(HttpClient::new()))];
+    let sources = sources(&profile, &store)?;
     let mut channel = alert_channel(&profile, args.dry_run)?;
     let agent = agent::from_settings(&profile.agent);
     if let Some(warning) = agent.warning() {
@@ -116,6 +122,12 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
         outcome.fitting.len(),
         db_path.display()
     );
+    if outcome.duplicates > 0 || outcome.waiting_on_duplicates > 0 {
+        println!(
+            "Merged {} Duplicate listings; {} Hackathons wait for the Agent to tell whether two listings are the same.",
+            outcome.duplicates, outcome.waiting_on_duplicates
+        );
+    }
     println!(
         "The Agent judged {} Candidates; {} wait for the next Run.",
         outcome.judged, outcome.unjudged
@@ -144,6 +156,31 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
     } else {
         ExitCode::SUCCESS
     })
+}
+
+/// The Sources a Run reads, all fetching politely through one client so each
+/// site's robots.txt is read once per Run.
+fn sources(profile: &Profile, store: &Store) -> anyhow::Result<Vec<Box<dyn Source>>> {
+    let http = Rc::new(PoliteHttp::new(HttpClient::new()));
+    let mut sources: Vec<Box<dyn Source>> = vec![
+        Box::new(HackathonBe::new(http.clone())),
+        Box::new(HackathonHub::new(
+            http.clone(),
+            store.listings_from(hackathonhub::NAME)?,
+            profile.sources.hackathonhub_pages_per_run,
+            SystemClock.today(),
+        )),
+    ];
+    for url in luma::CALENDARS {
+        sources.push(Box::new(LumaCalendar::new(http.clone(), *url)));
+    }
+    sources.push(Box::new(Devpost::new(http)));
+    // The person's own calendars are fetched for them, like a calendar app would.
+    let own = Rc::new(PoliteHttp::new(HttpClient::new()).ignoring_robots());
+    for url in &profile.sources.ics {
+        sources.push(Box::new(IcsCalendar::new(own.clone(), url.clone())));
+    }
+    Ok(sources)
 }
 
 /// The Alert channel the Profile names, or printing when it names none.

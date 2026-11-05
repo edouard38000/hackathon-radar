@@ -15,6 +15,7 @@ use hackathon_radar::alert::{Alert, AlertChannel};
 use hackathon_radar::candidate::Candidate;
 use hackathon_radar::clock::Clock;
 use hackathon_radar::http::{HttpGet, HttpPost, PostRequest};
+use hackathon_radar::matching::question;
 use hackathon_radar::profile::{Eligibility, Profile};
 use hackathon_radar::run::{self, RunDeps, RunOptions, RunOutcome};
 use hackathon_radar::sources::Source;
@@ -185,6 +186,11 @@ pub struct FakeAgent {
     /// The destination cities sent, one list per travel request. Travel
     /// requests are not counted in `asked`.
     pub travel_asked: RefCell<Vec<Vec<String>>>,
+    /// Answers about pairs of listings, by their names: whether they are the
+    /// same Hackathon. Pairs not listed are answered "different".
+    pub same_hackathon: Vec<(String, String, bool)>,
+    /// The names of the listing pairs asked about, one list per question.
+    pub pairs_asked: RefCell<Vec<Vec<(String, String)>>>,
 }
 
 impl FakeAgent {
@@ -200,7 +206,50 @@ impl FakeAgent {
             estimates: Vec::new(),
             travel_raw: None,
             travel_asked: RefCell::new(Vec::new()),
+            same_hackathon: Vec::new(),
+            pairs_asked: RefCell::new(Vec::new()),
         }
+    }
+
+    /// Answers that these two listings are, or aren't, the same Hackathon.
+    pub fn with_same_hackathon(mut self, a: &str, b: &str, same: bool) -> Self {
+        self.same_hackathon.push((a.to_owned(), b.to_owned(), same));
+        self
+    }
+
+    /// Answers whether a pair of listings is the same Hackathon.
+    fn answer_pairs(&self, request: &JudgeRequest<'_>) -> anyhow::Result<String> {
+        let names: Vec<(String, String)> = request
+            .candidates
+            .chunks(2)
+            .map(|pair| {
+                (
+                    pair[0].candidate.name.clone(),
+                    pair[1].candidate.name.clone(),
+                )
+            })
+            .collect();
+        self.pairs_asked.borrow_mut().push(names.clone());
+        if let FakeAnswer::Fail(error) = &self.answer {
+            anyhow::bail!("{error}");
+        }
+        let pairs: Vec<serde_json::Value> = names
+            .iter()
+            .enumerate()
+            .map(|(n, (a, b))| {
+                let same = self
+                    .same_hackathon
+                    .iter()
+                    .find(|(x, y, _)| (x == a && y == b) || (x == b && y == a))
+                    .is_some_and(|(_, _, same)| *same);
+                serde_json::json!({
+                    "id": (n + 1).to_string(),
+                    "same": same,
+                    "reason": if same { "Both link to the same event page." } else { "Different organisers." },
+                })
+            })
+            .collect();
+        Ok(serde_json::json!({ "pairs": pairs }).to_string())
     }
 
     pub fn failing(error: &str) -> Self {
@@ -287,6 +336,9 @@ impl Agent for FakeAgent {
     fn judge(&self, request: &JudgeRequest<'_>) -> anyhow::Result<String> {
         if request.schema == TRAVEL_SCHEMA {
             return self.estimate(request);
+        }
+        if request.schema == question::SCHEMA {
+            return self.answer_pairs(request);
         }
         let names = request
             .candidates

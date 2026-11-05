@@ -1,7 +1,13 @@
 //! Sources: places hackathon listings are collected from. Each one turns its
 //! listings into Candidates behind the same small interface.
 
+pub mod calendar;
+pub mod devpost;
 pub mod hackathon_be;
+pub mod hackathonhub;
+pub mod luma;
+pub mod places;
+pub mod polite;
 
 use crate::candidate::Candidate;
 

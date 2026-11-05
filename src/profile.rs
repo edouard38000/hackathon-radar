@@ -26,6 +26,8 @@ pub struct Profile {
     pub agent: AgentSettings,
     /// The Train limit and the person's corrections to travel estimates.
     pub travel: TravelSettings,
+    /// Extra Sources and how much the built-in ones fetch.
+    pub sources: SourceSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,6 +95,31 @@ pub struct AgentSettings {
     /// The most Agent steps the travel estimates request may use (ADR 0004).
     #[serde(default = "default_travel_max_turns")]
     pub travel_max_turns: u32,
+}
+
+/// The person's own Sources, and limits on the built-in ones.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SourceSettings {
+    /// ICS calendar feeds the person adds, such as a community's calendar.
+    #[serde(default)]
+    pub ics: Vec<String>,
+    /// The most new hackathonhub.eu event pages one Run fetches.
+    #[serde(default = "default_hackathonhub_pages_per_run")]
+    pub hackathonhub_pages_per_run: usize,
+}
+
+fn default_hackathonhub_pages_per_run() -> usize {
+    crate::sources::hackathonhub::DEFAULT_PAGES_PER_RUN
+}
+
+impl Default for SourceSettings {
+    fn default() -> Self {
+        Self {
+            ics: Vec::new(),
+            hackathonhub_pages_per_run: default_hackathonhub_pages_per_run(),
+        }
+    }
 }
 
 /// The Agents hackathon-radar can run.
@@ -188,6 +215,8 @@ struct ProfileFile {
     agent: AgentSettings,
     #[serde(default)]
     travel: travel::TravelFile,
+    #[serde(default)]
+    sources: SourceSettings,
 }
 
 #[derive(Deserialize)]
@@ -319,6 +348,16 @@ impl Profile {
         }
         let travel = TravelSettings::from_file(file.travel, &mut problems);
 
+        let mut sources = file.sources;
+        sources.ics = sources.ics.iter().map(|u| u.trim().to_owned()).collect();
+        for url in &sources.ics {
+            if !(url.starts_with("https://") || url.starts_with("http://")) {
+                problems.push(format!(
+                    "sources.ics: {url:?} is not a link; give the calendar's https:// address"
+                ));
+            }
+        }
+
         if !problems.is_empty() {
             return Err(ProfileError::Invalid {
                 path: path.to_owned(),
@@ -337,6 +376,7 @@ impl Profile {
             eligibility,
             agent: file.agent,
             travel,
+            sources,
         })
     }
 
@@ -579,6 +619,7 @@ mod tests {
                     travel_max_turns: DEFAULT_TRAVEL_MAX_TURNS,
                 },
                 travel: TravelSettings::default(),
+                sources: SourceSettings::default(),
             }
         );
         assert!(profile.includes_country("belgium"));
@@ -1053,5 +1094,36 @@ mod tests {
     fn unknown_schedule_keys_are_refused() {
         let err = parse(&format!("{HOME}[schedule]\nhour = 8\n")).unwrap_err();
         assert!(err.to_string().contains("hour"), "{err}");
+    }
+
+    #[test]
+    fn reads_the_persons_calendars_and_the_page_cap() {
+        let profile = parse(
+            "countries = [\"Belgium\"]\n[home]\ncity = \"Brussels\"\nairports = [\"BRU\"]\n\
+             [sources]\nics = [\" https://example.org/hacks.ics \"]\nhackathonhub_pages_per_run = 5\n",
+        )
+        .unwrap();
+        assert_eq!(profile.sources.ics, ["https://example.org/hacks.ics"]);
+        assert_eq!(profile.sources.hackathonhub_pages_per_run, 5);
+
+        let defaults =
+            parse("countries = [\"Belgium\"]\n[home]\ncity = \"Brussels\"\nairports = [\"BRU\"]\n")
+                .unwrap();
+        assert_eq!(defaults.sources, SourceSettings::default());
+        assert_eq!(defaults.sources.hackathonhub_pages_per_run, 40);
+    }
+
+    #[test]
+    fn a_calendar_that_isnt_a_link_is_refused() {
+        let error = parse(
+            "countries = [\"Belgium\"]\n[home]\ncity = \"Brussels\"\nairports = [\"BRU\"]\n\
+             [sources]\nics = [\"my calendar\"]\n",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            error.contains("sources.ics: \"my calendar\" is not a link"),
+            "{error}"
+        );
     }
 }

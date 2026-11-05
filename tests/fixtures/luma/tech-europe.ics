@@ -1,0 +1,112 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Luma//{Tech: Europe}//EN
+X-WR-CALNAME:{Tech: Europe}
+X-WR-CALDESC:Luma Calendar
+REFRESH-INTERVAL;VALUE=DURATION:PT12H
+X-PUBLISHED-TTL:PT12H
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+DTSTART:20261105T170000Z
+DTEND:20261105T200000Z
+DTSTAMP:20261105T140212Z
+ORGANIZER;CN="{Tech: Europe}":MAILTO:calendar-invite@lu.ma
+UID:evt-FnWMf1ZEVMDKqwq@events.lu.ma
+SUMMARY:Physical AI Meetup - Zurich Edition
+DESCRIPTION:Get up-to-date information at: https://luma.com/physical-ai-zu
+ r\n\nAddress:\nJ floor\nZürich, Switzerland\n\nHosted by {Tech: Europe} &
+  3 others
+LOCATION:J floor, Josefstrasse 206, 8005 Zürich, Switzerland
+GEO:47.3871414;8.5237082
+SEQUENCE:216050532
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261107T080000Z
+DTEND:20261108T193000Z
+DTSTAMP:20261105T140212Z
+ORGANIZER;CN="42 Artificial Intelligence":MAILTO:calendar-invite@lu.ma
+UID:evt-8WHnNAmytN2nepk@events.lu.ma
+SUMMARY:H Company × 42AI | Computer Use Agents Hackathon
+DESCRIPTION:Get up-to-date information at: https://luma.com/hz9db5u9\n\nAd
+ dress:\nCheck event page for more details.\n\nHosted by 42 Artificial Inte
+ lligence & 3 others
+LOCATION:https://luma.com/event/evt-8WHnNAmytN2nepk
+GEO:48.87070672025035;2.3310389749843763
+SEQUENCE:216050532
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261114T083000Z
+DTEND:20261114T203000Z
+DTSTAMP:20261105T140212Z
+ORGANIZER;CN="{Tech: Europe}":MAILTO:calendar-invite@lu.ma
+UID:evt-sNWJnECt0wl2HWO@events.lu.ma
+SUMMARY:{Tech: Europe} Agentic AI Hack
+DESCRIPTION:Get up-to-date information at: https://luma.com/kar-hack\n\nAd
+ dress:\nCheck event page for more details.\n\nHosted by {Tech: Europe}
+LOCATION:https://luma.com/event/evt-sNWJnECt0wl2HWO
+GEO:48.99955962906044;8.468436867069798
+SEQUENCE:216050532
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261118T170000Z
+DTEND:20261118T200000Z
+DTSTAMP:20261105T140212Z
+ORGANIZER;CN="{Tech: Europe}":MAILTO:calendar-invite@lu.ma
+UID:evt-yuJKDPkUBChtRSr@events.lu.ma
+SUMMARY:Global AI Nights Berlin: AI Agents That Think, Remember & Act
+DESCRIPTION:Get up-to-date information at: https://luma.com/btnr49r2\n\nAd
+ dress:\nThe Delta\nThe Atrium\nBerlin, Germany\n\nHosted by {Tech: Europe}
+  & 3 others
+LOCATION:The Delta, Donaustraße 44, 12043 Berlin, Germany
+GEO:52.479905099999996;13.4394434
+SEQUENCE:216050532
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261128T083000Z
+DTEND:20261129T180000Z
+DTSTAMP:20261105T140212Z
+ORGANIZER;CN="{Tech: Europe}":MAILTO:calendar-invite@lu.ma
+UID:evt-PYaG9FME34om1Gr@events.lu.ma
+SUMMARY:BIG BERLIN HACK - 350+ Builders from all over Europe
+DESCRIPTION:Get up-to-date information at: https://luma.com/bbh\n\nAddress
+ :\nCheck event page for more details.\n\nHosted by {Tech: Europe} & 3 othe
+ rs
+LOCATION:https://luma.com/event/evt-PYaG9FME34om1Gr
+GEO:52.48178538808014;13.440357876596048
+SEQUENCE:216050532
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261128T090000Z
+DTEND:20261128T190000Z
+DTSTAMP:20261105T140212Z
+ORGANIZER;CN="H Company":MAILTO:calendar-invite@lu.ma
+UID:evt-7tMH9VskMUGCqcE@events.lu.ma
+SUMMARY:Computer Use Agents Hackathon - London Edition
+DESCRIPTION:Get up-to-date information at: https://luma.com/hcompany-6xo3
+ \n\nAddress:\nCheck event page for more details.\n\nHosted by H Company &
+ Encode Club
+LOCATION:https://luma.com/event/evt-7tMH9VskMUGCqcE
+GEO:51.52570838969971;-0.08349458714574456
+SEQUENCE:216050532
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261203T170000Z
+DTEND:20261203T210000Z
+DTSTAMP:20261105T140212Z
+ORGANIZER;CN="{Tech: Europe}":MAILTO:calendar-invite@lu.ma
+UID:evt-Qw3rTy7UiOp9AsD@events.lu.ma
+SUMMARY:Voice AI Hack Night
+DESCRIPTION:Get up-to-date information at: https://luma.com/voice-hack-ni
+ ght\n\nHosted by {Tech: Europe}
+LOCATION:https://luma.com/event/evt-Qw3rTy7UiOp9AsD
+SEQUENCE:216050532
+STATUS:TENTATIVE
+END:VEVENT
+END:VCALENDAR
