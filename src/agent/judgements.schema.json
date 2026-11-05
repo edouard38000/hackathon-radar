@@ -1,0 +1,57 @@
+{
+  "title": "hackathon-radar judgements",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["judgements"],
+  "properties": {
+    "judgements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "is_hackathon",
+          "eligible",
+          "eligibility_restriction",
+          "travel_funded",
+          "travel_detail",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The id of the Candidate, exactly as given."
+          },
+          "is_hackathon": {
+            "type": "boolean",
+            "description": "True when participants build software, models, data products or hardware during the event."
+          },
+          "eligible": {
+            "type": "boolean",
+            "description": "False only when a stated restriction excludes this person, given their Eligibility facts."
+          },
+          "eligibility_restriction": {
+            "type": ["string", "null"],
+            "description": "Who may take part, as the organiser states it; null when no restriction is stated."
+          },
+          "travel_funded": {
+            "type": "string",
+            "enum": ["none", "partial", "full"],
+            "description": "Whether the organiser covers travel or lodging: none, part of it, or all of it."
+          },
+          "travel_detail": {
+            "type": ["string", "null"],
+            "description": "What is covered and for whom; null when travel_funded is none."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "One or two sentences explaining the judgement."
+          }
+        }
+      }
+    }
+  }
+}

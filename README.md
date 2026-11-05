@@ -13,7 +13,7 @@ A self-hosted hackathon tracker. An AI agent running on your own machine finds h
 
 ## Try it
 
-`hackathon-radar run --dry-run` reads the [hackathon.be](https://hackathon.be) calendar, keeps the Hackathons that haven't ended and are in your Profile's Countries, stores them in a local SQLite database, and prints the Alert it would send. A dry run sends nothing and marks nothing as Announced.
+`hackathon-radar run --dry-run` reads the [hackathon.be](https://hackathon.be) calendar, keeps the listings that haven't ended and are in your Profile's Countries, asks your Agent (Claude Code) which of them are real Hackathons you're eligible for and which are Travel-funded, stores the results in a local SQLite database, and prints the Alert it would send. A dry run sends nothing and marks nothing as Announced.
 
 ```sh
 cargo run -- run --dry-run --profile examples/profile.toml
@@ -37,6 +37,16 @@ launchd and systemd give scheduled jobs only a minimal `PATH`, so `schedule inst
 
 The schedule runs the binary you installed it from, so install the binary first (`cargo install --path .`) rather than scheduling a `target/` build. On Linux, systemd only runs user timers while you're logged in unless you enable lingering (`loginctl enable-linger`).
 
+### The Agent
+
+Each Run sends the listings that passed the Profile's rules to [Claude Code](https://claude.com/claude-code), run headless on your own `claude` login (or `ANTHROPIC_API_KEY`, if you set it). hackathon-radar never signs you in; if `claude` isn't signed in, run `claude` once yourself. The Agent may only search and read the web:
+
+```sh
+claude -p --permission-mode dontAsk --allowedTools WebSearch,WebFetch --max-turns <cap> --output-format json --json-schema <schema>
+```
+
+The prompt goes on stdin. The prompt and schema are built into hackathon-radar, and its answer is checked against the schema; if the Agent fails or answers in the wrong shape, the listings are kept and sent again on the next Run. The step cap is `agent.max_turns` in your Profile (50 by default), and `[eligibility]` holds the facts organisers restrict on.
+
 ## Development
 
 ```sh
@@ -45,7 +55,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-Tests never touch the network: Sources read saved fixtures from `tests/fixtures/`.
+Tests never touch the network: Sources read saved fixtures from `tests/fixtures/`, and no test runs a real Agent.
 
 ## License
 
