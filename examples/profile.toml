@@ -1,0 +1,10 @@
+# An example Profile. Copy it to ~/.config/hackathon-radar/profile.toml
+# (or pass it with --profile) and change it to suit you. It holds no secrets.
+
+# The countries you'll travel to at your own cost.
+countries = ["Belgium", "France", "Netherlands", "Luxembourg"]
+
+# The city you travel from, and the airports you fly out of (IATA codes).
+[home]
+city = "Brussels"
+airports = ["BRU", "CRL"]

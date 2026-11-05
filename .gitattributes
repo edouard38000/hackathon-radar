@@ -1,0 +1,2 @@
+# ICS fixtures are recorded byte for byte, CRLF line endings included.
+*.ics -text

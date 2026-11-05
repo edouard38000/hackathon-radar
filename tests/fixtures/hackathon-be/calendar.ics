@@ -1,0 +1,77 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//hackathon.be//Hackathon Belgium//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Hackathon Belgium
+X-WR-CALDESC:Hackathons in Belgium
+REFRESH-INTERVAL;VALUE=DURATION:P1D
+X-PUBLISHED-TTL:P1D
+BEGIN:VEVENT
+UID:euroavia-ideathon-bruges-2026@hackathon.be
+DTSTAMP:20261104T000000Z
+DTSTART;VALUE=DATE:20261103
+DTEND;VALUE=DATE:20261109
+SUMMARY:EUROAVIA Ideathon
+URL:https://hackathon.be/hackathons/euroavia-ideathon-bruges-2026/
+LOCATION:Bruges
+DESCRIPTION:International student ideathon where teams solve aerospace cha
+ llenges set by industry partners.
+END:VEVENT
+BEGIN:VEVENT
+UID:odoo-hackathon-6-2026@hackathon.be
+DTSTAMP:20261104T000000Z
+DTSTART;VALUE=DATE:20261120
+DTEND;VALUE=DATE:20261123
+SUMMARY:Odoo Hackathon #6
+URL:https://hackathon.be/hackathons/odoo-hackathon-6-2026/
+LOCATION:9 Rue des Bourlottes\, 1367 Ramillies
+DESCRIPTION:Sixth weekend coding hackathon at Odoo's Ramillies campus for 
+ developers and tech enthusiasts.
+END:VEVENT
+BEGIN:VEVENT
+UID:momu-hackathon-2026@hackathon.be
+DTSTAMP:20261104T000000Z
+DTSTART;VALUE=DATE:20261121
+DTEND;VALUE=DATE:20261123
+SUMMARY:MoMu Hackathon
+URL:https://hackathon.be/hackathons/momu-hackathon-2026/
+LOCATION:MoMu Library & Dries Van Noten Study Center\, Nationalestraat 28\
+ , Antwerp
+DESCRIPTION:Weekend creative-tech hackathon reimagining a museum's fashion
+  study collection through digital experiences.
+END:VEVENT
+BEGIN:VEVENT
+UID:hack-the-future-2026@hackathon.be
+DTSTAMP:20261104T000000Z
+DTSTART;VALUE=DATE:20261124
+DTEND;VALUE=DATE:20261126
+SUMMARY:Hack The Future
+URL:https://hackathon.be/hackathons/hack-the-future-2026/
+LOCATION:Antwerp
+DESCRIPTION:Next edition of the themed two-day hackathon for IT and creati
+ ve students.
+END:VEVENT
+BEGIN:VEVENT
+UID:crosstechxperience-hackathon-3-2026@hackathon.be
+DTSTAMP:20261104T000000Z
+DTSTART;VALUE=DATE:20261211
+DTEND;VALUE=DATE:20261214
+SUMMARY:CrossTechXperience Hackathon #3
+URL:https://hackathon.be/hackathons/crosstechxperience-hackathon-3-2026/
+LOCATION:Howest\, 8500 Kortrijk
+DESCRIPTION:Third cross-border hackathon on immersive\, interactive and ga
+ ming technologies\, hosted at Howest in Kortrijk.
+END:VEVENT
+BEGIN:VEVENT
+UID:hacking-health-liege-2027@hackathon.be
+DTSTAMP:20261104T000000Z
+DTSTART;VALUE=DATE:20270312
+DTEND;VALUE=DATE:20270313
+SUMMARY:Hacking Health Liège
+URL:https://hackathon.be/hackathons/hacking-health-liege-2027/
+LOCATION:Liège
+DESCRIPTION:Third yearly health hackathon in Liège; no coding skills need
+ ed\, varied profiles welcome.
+END:VEVENT
+END:VCALENDAR
