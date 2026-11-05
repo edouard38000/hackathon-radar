@@ -28,3 +28,25 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
+
+  # The Photon sidecar, the one part that isn't Rust (ADR 0005). Its tests use
+  # a fake Photon SDK and never touch the network.
+  photon-sidecar:
+    name: Photon sidecar (Node ${{ matrix.node }})
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20.18.1", "24"]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sidecar/photon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: sidecar/photon/package-lock.json
+      - run: npm ci
+      - run: npm test

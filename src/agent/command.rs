@@ -283,6 +283,7 @@ impl<R: ProcessRunner> Generic<R> {
             stdin,
             working_dir: Some(working_dir.to_owned()),
             timeout: self.timeout,
+            env: Vec::new(),
         }
     }
 

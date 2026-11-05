@@ -476,6 +476,28 @@ impl Harness {
             .map(|trip| trip.label)
     }
 
+    /// A Run with another Alert channel than the harness's recording one, such
+    /// as a real channel driven by a fake process runner.
+    pub fn try_run_with_channel(
+        &mut self,
+        channel: &mut dyn AlertChannel,
+        sources: &[Box<dyn Source>],
+        today: NaiveDate,
+        options: RunOptions,
+    ) -> anyhow::Result<RunOutcome> {
+        run::run(
+            RunDeps {
+                profile: &self.profile,
+                sources,
+                clock: &FixedClock(today),
+                store: &mut self.store,
+                channel,
+                agent: &self.agent,
+            },
+            options,
+        )
+    }
+
     pub fn unjudged_names(&self) -> Vec<String> {
         self.store
             .unjudged()

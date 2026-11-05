@@ -145,6 +145,7 @@ impl<R: ProcessRunner> Agent for ClaudeCode<R> {
             stdin: request.prompt.clone(),
             working_dir: Some(dir.path().to_owned()),
             timeout: self.timeout,
+            env: Vec::new(),
         })?;
         self.answer_with_cap(&output, cap)
     }

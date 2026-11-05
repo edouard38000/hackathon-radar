@@ -6,9 +6,11 @@ use clap::{Parser, Subcommand};
 
 use hackathon_radar::agent;
 use hackathon_radar::alert::ntfy::{self, NtfyChannel};
+use hackathon_radar::alert::photon::{self, PhotonChannel};
 use hackathon_radar::alert::{AlertChannel, PrintChannel};
 use hackathon_radar::clock::SystemClock;
 use hackathon_radar::http::HttpClient;
+use hackathon_radar::process::SystemRunner;
 use hackathon_radar::profile::{AlertChannelSetting, Profile};
 use hackathon_radar::run::{self, RunDeps, RunOptions};
 use hackathon_radar::sources::Source;
@@ -72,7 +74,7 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
     let profile = Profile::load(&profile_path)?;
     let mut store = Store::open(&db_path)?;
     let sources: Vec<Box<dyn Source>> = vec![Box::new(HackathonBe::new(HttpClient::new()))];
-    let mut channel = alert_channel(&profile);
+    let mut channel = alert_channel(&profile, args.dry_run)?;
     let agent = agent::from_settings(&profile.agent);
     if let Some(warning) = agent.warning() {
         eprintln!("warning: {warning}");
@@ -130,6 +132,8 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
         println!("\nNothing new to send.");
     } else if let Some(AlertChannelSetting::Ntfy(_)) = &profile.alert_channel {
         println!("\nSent the Alert through ntfy.");
+    } else if let Some(AlertChannelSetting::Photon(_)) = &profile.alert_channel {
+        println!("\nSent the Alert by iMessage through Photon.");
     }
 
     // Every Source failing means the Run learnt nothing, which a scheduler should see.
@@ -143,15 +147,28 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
 }
 
 /// The Alert channel the Profile names, or printing when it names none.
-fn alert_channel(profile: &Profile) -> Box<dyn AlertChannel> {
-    match &profile.alert_channel {
+fn alert_channel(profile: &Profile, dry_run: bool) -> anyhow::Result<Box<dyn AlertChannel>> {
+    Ok(match &profile.alert_channel {
         Some(AlertChannelSetting::Ntfy(setting)) => Box::new(NtfyChannel::new(
             setting.clone(),
             ntfy::token_from_env(),
             HttpClient::new(),
         )),
+        Some(AlertChannelSetting::Photon(setting)) => {
+            let credentials = photon::Credentials::from_env().map_err(|e| e.to_string());
+            // Checked before the Run, so missing credentials don't waste the Agent's work.
+            if let (false, Err(why)) = (dry_run, &credentials) {
+                anyhow::bail!("{why}");
+            }
+            Box::new(PhotonChannel::new(
+                setting.clone(),
+                credentials,
+                photon::Sidecar::locate(),
+                SystemRunner,
+            ))
+        }
         None => Box::new(PrintChannel),
-    }
+    })
 }
 
 #[derive(clap::Args)]

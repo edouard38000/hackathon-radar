@@ -151,6 +151,7 @@ impl<R: ProcessRunner> Agent for Codex<R> {
             stdin: request.prompt.clone(),
             working_dir: Some(scratch.work.path().to_owned()),
             timeout: self.timeout,
+            env: Vec::new(),
         })?;
         self.answer(&output)
     }

@@ -2,6 +2,7 @@
 //! adapters take a [`ProcessRunner`] so tests can record the command instead of
 //! starting it.
 
+use std::fmt;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Stdio};
@@ -11,7 +12,7 @@ use std::time::{Duration, Instant};
 use anyhow::Context;
 
 /// A program to run, with the text to write to its stdin.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Command {
     pub program: String,
     pub args: Vec<String>,
@@ -20,6 +21,23 @@ pub struct Command {
     pub working_dir: Option<PathBuf>,
     /// Stopped and reported as an error once it runs this long.
     pub timeout: Duration,
+    /// Variables set for the program on top of the environment it inherits.
+    /// They may hold secrets, so `Debug` shows their names only.
+    pub env: Vec<(String, String)>,
+}
+
+impl fmt::Debug for Command {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let env: Vec<&str> = self.env.iter().map(|(name, _)| name.as_str()).collect();
+        f.debug_struct("Command")
+            .field("program", &self.program)
+            .field("args", &self.args)
+            .field("stdin", &self.stdin)
+            .field("working_dir", &self.working_dir)
+            .field("timeout", &self.timeout)
+            .field("env", &env)
+            .finish()
+    }
 }
 
 /// What a finished program left behind.
@@ -51,6 +69,7 @@ impl ProcessRunner for SystemRunner {
         let mut process = std::process::Command::new(&command.program);
         process
             .args(&command.args)
+            .envs(command.env.iter().map(|(name, value)| (name, value)))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -125,6 +144,7 @@ mod tests {
             stdin: "hello from stdin".into(),
             working_dir: None,
             timeout,
+            env: Vec::new(),
         }
     }
 
@@ -150,6 +170,17 @@ mod tests {
             .run(&sh("sleep 5", Duration::from_millis(200)))
             .unwrap_err();
         assert!(format!("{err:#}").contains("was stopped"), "{err:#}");
+    }
+
+    #[test]
+    fn sets_extra_variables_and_never_debug_prints_their_values() {
+        let mut command = sh("printf %s \"$RADAR_TEST_VAR\"", Duration::from_secs(10));
+        command.env = vec![("RADAR_TEST_VAR".into(), "s3cret-value".into())];
+        let output = SystemRunner.run(&command).unwrap();
+        assert_eq!(output.stdout, "s3cret-value");
+        let debug = format!("{command:?}");
+        assert!(debug.contains("RADAR_TEST_VAR"), "{debug}");
+        assert!(!debug.contains("s3cret-value"), "{debug}");
     }
 
     #[test]

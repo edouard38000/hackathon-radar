@@ -42,6 +42,16 @@ pub struct Home {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AlertChannelSetting {
     Ntfy(NtfySetting),
+    Photon(PhotonSetting),
+}
+
+/// iMessage from the person's own Photon line (ADR 0005). The project
+/// credentials are secrets, so they live outside the Profile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PhotonSetting {
+    /// Who the Alert goes to: a phone number in E.164 format, such as
+    /// `+32470123456`, or a Photon space ID.
+    pub to: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -194,6 +204,7 @@ struct AlertChannelFile {
     kind: String,
     topic: Option<String>,
     server: Option<String>,
+    to: Option<String>,
 }
 
 impl Profile {
@@ -343,17 +354,62 @@ fn alert_channel(
 ) -> Option<AlertChannelSetting> {
     match file.kind.trim() {
         "ntfy" => ntfy(file, problems).map(AlertChannelSetting::Ntfy),
+        "photon" => photon(file, problems).map(AlertChannelSetting::Photon),
         other => {
             problems.push(format!(
-                "alert_channel.kind: {other:?} is not an Alert channel; use \"ntfy\""
+                "alert_channel.kind: {other:?} is not an Alert channel; use \"photon\" or \"ntfy\""
             ));
             None
         }
     }
 }
 
+fn photon(file: AlertChannelFile, problems: &mut Vec<String>) -> Option<PhotonSetting> {
+    let before = problems.len();
+    for (key, value) in [("topic", &file.topic), ("server", &file.server)] {
+        if value.is_some() {
+            problems.push(format!(
+                "alert_channel.{key} is only for kind = \"ntfy\"; Photon needs just `to`"
+            ));
+        }
+    }
+
+    let to = file.to.as_deref().map(str::trim).unwrap_or_default();
+    if to.is_empty() {
+        problems.push(
+            "alert_channel.to is missing; Photon needs your phone number in E.164 format, such as \"+32470123456\""
+                .to_owned(),
+        );
+    } else if !is_photon_recipient(to) {
+        problems.push(format!(
+            "alert_channel.to: {to:?} is not a phone number in E.164 format, such as \"+32470123456\", \
+             or a Photon space ID"
+        ));
+    }
+
+    (problems.len() == before).then(|| PhotonSetting { to: to.to_owned() })
+}
+
+/// A phone number in E.164 format (`+`, then 7 to 15 digits with no leading
+/// zero), or anything else without spaces, taken as a Photon space ID.
+fn is_photon_recipient(to: &str) -> bool {
+    match to.strip_prefix('+') {
+        Some(digits) => {
+            (7..=15).contains(&digits.len())
+                && digits.bytes().all(|b| b.is_ascii_digit())
+                && !digits.starts_with('0')
+        }
+        None => !to.contains(char::is_whitespace),
+    }
+}
+
 fn ntfy(file: AlertChannelFile, problems: &mut Vec<String>) -> Option<NtfySetting> {
     let before = problems.len();
+    if file.to.is_some() {
+        problems.push(
+            "alert_channel.to is only for kind = \"photon\"; ntfy sends to its topic".to_owned(),
+        );
+    }
 
     let topic = file.topic.as_deref().map(str::trim).unwrap_or_default();
     if topic.is_empty() {
@@ -812,6 +868,79 @@ mod tests {
         ))
         .unwrap_err();
         assert!(matches!(token, ProfileError::Syntax { .. }), "{token}");
+    }
+
+    #[test]
+    fn photon_sends_to_a_phone_number_or_a_space() {
+        let profile = parse(&format!(
+            "{HOME}[alert_channel]\nkind = \"photon\"\nto = \" +32470123456 \"\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            profile.alert_channel,
+            Some(AlertChannelSetting::Photon(PhotonSetting {
+                to: "+32470123456".into(),
+            }))
+        );
+        let profile = parse(&format!(
+            "{HOME}[alert_channel]\nkind = \"photon\"\nto = \"any;-;+32470123456\"\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            profile.alert_channel,
+            Some(AlertChannelSetting::Photon(PhotonSetting {
+                to: "any;-;+32470123456".into(),
+            }))
+        );
+    }
+
+    #[test]
+    fn photon_needs_a_valid_recipient_and_no_ntfy_keys() {
+        let missing = parse(&format!("{HOME}[alert_channel]\nkind = \"photon\"\n")).unwrap_err();
+        assert!(
+            missing.to_string().contains("alert_channel.to is missing"),
+            "{missing}"
+        );
+
+        let bad = parse(&format!(
+            "{HOME}[alert_channel]\nkind = \"photon\"\nto = \"+32 470 12 34 56\"\ntopic = \"radar\"\n"
+        ))
+        .unwrap_err();
+        assert_eq!(
+            bad.to_string(),
+            "the Profile at profile.toml is invalid:\n\
+             \x20 - alert_channel.topic is only for kind = \"ntfy\"; Photon needs just `to`\n\
+             \x20 - alert_channel.to: \"+32 470 12 34 56\" is not a phone number in E.164 format, \
+             such as \"+32470123456\", or a Photon space ID"
+        );
+
+        for to in ["+0470123456", "+12345", "+3247012345678901", "+32abc"] {
+            let err = parse(&format!(
+                "{HOME}[alert_channel]\nkind = \"photon\"\nto = \"{to}\"\n"
+            ))
+            .unwrap_err();
+            assert!(err.to_string().contains("E.164"), "{to}: {err}");
+        }
+
+        let ntfy_with_to = parse(&format!(
+            "{HOME}[alert_channel]\nkind = \"ntfy\"\ntopic = \"radar\"\nto = \"+32470123456\"\n"
+        ))
+        .unwrap_err();
+        assert!(
+            ntfy_with_to
+                .to_string()
+                .contains("alert_channel.to is only for kind = \"photon\""),
+            "{ntfy_with_to}"
+        );
+    }
+
+    #[test]
+    fn photon_credentials_have_no_place_in_the_profile() {
+        let err = parse(&format!(
+            "{HOME}[alert_channel]\nkind = \"photon\"\nto = \"+32470123456\"\nproject_secret = \"x\"\n"
+        ))
+        .unwrap_err();
+        assert!(matches!(err, ProfileError::Syntax { .. }), "{err}");
     }
 
     #[test]

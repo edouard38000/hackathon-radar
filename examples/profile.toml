@@ -32,6 +32,11 @@ airports = ["BRU", "CRL"]
 # [alert_channel]
 # kind = "ntfy"
 # topic = "hackathon-radar-example-7f3k9q"
+#
+# For iMessage Alerts from your own Photon line instead (see the README), use
+#   kind = "photon"
+#   to = "+32470123456"    (your phone number, in E.164 format)
+# and set PHOTON_PROJECT_ID and PHOTON_PROJECT_SECRET in the environment.
 
 # When `hackathon-radar schedule install` runs a Run, in local time. Optional:
 # without it, Runs happen every Monday and Thursday at 08:00.

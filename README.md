@@ -2,7 +2,7 @@
 
 A self-hosted hackathon tracker. An AI agent running on your own machine finds hackathons that fit where you live and what you care about, tracks application deadlines, and texts you when something new or travel-funded appears.
 
-> **Status:** early development. Runs read one Source and send Alerts through ntfy.
+> **Status:** early development. Runs read one Source and send Alerts by iMessage through Photon, or through ntfy.
 
 ## Principles
 
@@ -19,9 +19,38 @@ A self-hosted hackathon tracker. An AI agent running on your own machine finds h
 cargo run -- run --dry-run --profile examples/profile.toml
 ```
 
-Without `--dry-run`, the Alert goes to the Alert channel in your Profile. For now that is [ntfy](https://ntfy.sh): install the ntfy app, subscribe to a hard-to-guess topic, and uncomment the `[alert_channel]` section of the example Profile with that topic. Your first Alert is a Welcome Alert listing up to 6 Hackathons that already Fit. Later Runs only tell you about Hackathons that newly Fit, each one once, at most 6 per Alert (the rest come in the next one), and send nothing when nothing is new. If your ntfy server needs an access token, set it in `HACKATHON_RADAR_NTFY_TOKEN`; it never goes in the Profile. With no Alert channel set, the Alert is printed instead and nothing is marked as Announced.
+Without `--dry-run`, the Alert goes to the Alert channel in your Profile: an iMessage from your own [Photon](#photon-imessage-alerts) line, or a push through [ntfy](https://ntfy.sh). For ntfy, which needs no account, install the ntfy app, subscribe to a hard-to-guess topic, and uncomment the `[alert_channel]` section of the example Profile with that topic. Your first Alert is a Welcome Alert listing up to 6 Hackathons that already Fit. Later Runs only tell you about Hackathons that newly Fit, each one once, at most 6 per Alert (the rest come in the next one), and send nothing when nothing is new. If your ntfy server needs an access token, set it in `HACKATHON_RADAR_NTFY_TOKEN`; it never goes in the Profile. With no Alert channel set, the Alert is printed instead and nothing is marked as Announced.
 
 Your Profile is a small TOML file with your Home, Countries and Alert channel; see [`examples/profile.toml`](examples/profile.toml). By default it is read from `~/.config/hackathon-radar/profile.toml` and the database lives at `~/.local/share/hackathon-radar/hackathon-radar.sqlite` (both honour `XDG_CONFIG_HOME` and `XDG_DATA_HOME`). Pass `--profile` and `--db` to use other paths.
+
+### Photon (iMessage) Alerts
+
+[Photon](https://photon.codes) is a hosted iMessage API with a free tier. Its messages come from Photon's own line, so they notify you like any text (an iMessage from your own Apple ID to yourself wouldn't). Set it up once:
+
+1. Sign up at [app.photon.codes](https://app.photon.codes), create a project and turn on iMessage (Spectrum). Note the project's ID and secret, and the iMessage line Photon gives you.
+2. **Text your Photon line once from your phone**, with anything. A shared (free-tier) line can only message a number that has texted it first; until you do, sends fail with "Photon won't message … yet".
+3. Install [Node.js](https://nodejs.org) 20.18.1 or later, then install the sidecar's pinned dependencies once:
+
+   ```sh
+   cd sidecar/photon && npm ci
+   ```
+
+4. Put your number in the Profile (E.164 format, or a Photon space ID) and your credentials in the environment. They never go in the Profile.
+
+   ```toml
+   [alert_channel]
+   kind = "photon"
+   to = "+32470123456"
+   ```
+
+   ```sh
+   export PHOTON_PROJECT_ID=...
+   export PHOTON_PROJECT_SECRET=...
+   ```
+
+Reading the credentials from the environment is a stopgap: they will move to your OS keychain, and `hackathon-radar init` and `doctor` will do steps 3 and 4 for you and check the rest. Until then, a scheduled Run only gets the `PATH` from `schedule install`, not these variables, so use ntfy for scheduled Runs or run `hackathon-radar run` from a shell that has them.
+
+**Why there's some Node here.** Everything in hackathon-radar is Rust except [`sidecar/photon/`](sidecar/photon/), because Photon only ships a TypeScript SDK ([ADR 0005](docs/adr/0005-photon-node-sidecar.md)). For each Alert, the CLI runs `node sidecar/photon/send.mjs` once, with your number and the Alert text as JSON on stdin and the two credentials in its environment; the sidecar sends one message with the SDK, prints one line of JSON and exits. Its dependencies are pinned in `package-lock.json`, and their install scripts are turned off. If you installed the binary from somewhere other than this checkout, point `HACKATHON_RADAR_PHOTON_SIDECAR_DIR` at the `sidecar/photon` directory.
 
 ## Schedule
 
@@ -100,9 +129,10 @@ The Agent estimates the fastest train journey from Home and the nearest airport 
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
+(cd sidecar/photon && npm ci && npm test)   # the Photon sidecar
 ```
 
-Tests never touch the network: Sources read saved fixtures from `tests/fixtures/`, and no test runs a real Agent.
+Tests never touch the network: Sources read saved fixtures from `tests/fixtures/`, no test runs a real Agent, and no test reaches Photon. The Photon channel's Rust tests and the sidecar's own tests (with a fake Photon SDK) check the same recorded sidecar outputs in `tests/fixtures/photon/`.
 
 ## License
 

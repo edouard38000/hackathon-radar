@@ -1,6 +1,7 @@
 //! Alerts: composing the text a person receives, and the channel it goes out on.
 
 pub mod ntfy;
+pub mod photon;
 
 use chrono::{Datelike, NaiveDate};
 

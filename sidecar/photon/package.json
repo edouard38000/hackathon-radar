@@ -1,0 +1,25 @@
+{
+  "name": "hackathon-radar-photon-sidecar",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sends one hackathon-radar Alert through Photon's TypeScript SDK and exits (ADR 0005).",
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "main": "send.mjs",
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "scripts": {
+    "test": "node --test test/send.test.mjs"
+  },
+  "dependencies": {
+    "@spectrum-ts/core": "12.14.0",
+    "@spectrum-ts/imessage": "12.14.0"
+  },
+  "overrides": {
+    "@opentelemetry/core": "2.12.0",
+    "@opentelemetry/resources": "2.12.0",
+    "@opentelemetry/sdk-metrics": "2.12.0",
+    "@opentelemetry/sdk-trace-base": "2.12.0"
+  }
+}
