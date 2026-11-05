@@ -2,7 +2,7 @@
 //! sends at most one Alert. Everything it touches is passed in, so tests can
 //! drive a whole Run with fakes.
 
-use crate::alert::{self, Alert, AlertChannel};
+use crate::alert::{self, Alert, AlertChannel, AlertKind};
 use crate::candidate::Candidate;
 use crate::clock::Clock;
 use crate::profile::Profile;
@@ -63,12 +63,23 @@ pub fn run(deps: RunDeps<'_>, options: RunOptions) -> anyhow::Result<RunOutcome>
     let fitting = rules::apply(candidates, deps.profile, today);
     deps.store.save_hackathons(&fitting, today)?;
 
-    let alert = alert::compose(&fitting);
+    // Until something has been Announced, the Alert is the Welcome Alert; either
+    // way it only covers what no Alert has announced yet.
+    let kind = if deps.store.has_announced_anything()? {
+        AlertKind::New
+    } else {
+        AlertKind::Welcome
+    };
+    let not_announced = deps.store.not_announced(&fitting)?;
+    let composed = alert::compose(&not_announced, kind);
     let mut sent = false;
-    if let Some(alert) = &alert
+    if let Some(composed) = &composed
         && !options.dry_run
     {
-        deps.channel.send(alert)?;
+        deps.channel.send(&composed.alert)?;
+        if deps.channel.reaches_the_person() {
+            deps.store.mark_announced(&composed.announces, today)?;
+        }
         sent = true;
     }
 
@@ -76,7 +87,7 @@ pub fn run(deps: RunDeps<'_>, options: RunOptions) -> anyhow::Result<RunOutcome>
         collected,
         fitting,
         failed_sources,
-        alert,
+        alert: composed.map(|c| c.alert),
         sent,
     })
 }

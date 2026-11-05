@@ -8,3 +8,13 @@ countries = ["Belgium", "France", "Netherlands", "Luxembourg"]
 [home]
 city = "Brussels"
 airports = ["BRU", "CRL"]
+
+# Where Alerts go. Without this section, Alerts are only printed.
+# ntfy (https://ntfy.sh) needs no account: install its phone app, subscribe to
+# a topic, and put the same topic here. Anyone who knows a topic on ntfy.sh can
+# read it, so pick a long, hard-to-guess one instead of this example.
+# Add `server = "https://ntfy.example.org"` to use your own ntfy server, and set
+# HACKATHON_RADAR_NTFY_TOKEN in the environment if that server needs an access token.
+# [alert_channel]
+# kind = "ntfy"
+# topic = "hackathon-radar-example-7f3k9q"

@@ -12,7 +12,7 @@ use tempfile::TempDir;
 use hackathon_radar::alert::{Alert, AlertChannel};
 use hackathon_radar::candidate::Candidate;
 use hackathon_radar::clock::Clock;
-use hackathon_radar::http::HttpGet;
+use hackathon_radar::http::{HttpGet, HttpPost, PostRequest};
 use hackathon_radar::profile::Profile;
 use hackathon_radar::run::{self, RunDeps, RunOptions, RunOutcome};
 use hackathon_radar::sources::Source;
@@ -93,17 +93,63 @@ impl Source for FakeSource {
     }
 }
 
-/// Records each Alert instead of sending it.
+/// Records each Alert instead of sending it, or fails like an unreachable channel
+/// while `fail_with` is set. With `print_only`, it behaves like the print
+/// fallback: Alerts are recorded but reach no one.
 #[derive(Default)]
 pub struct RecordingChannel {
     pub sent: Vec<Alert>,
+    pub fail_with: Option<String>,
+    pub print_only: bool,
 }
 
 impl AlertChannel for RecordingChannel {
     fn send(&mut self, alert: &Alert) -> anyhow::Result<()> {
+        if let Some(error) = &self.fail_with {
+            anyhow::bail!("{error}");
+        }
         self.sent.push(alert.clone());
         Ok(())
     }
+
+    fn reaches_the_person(&self) -> bool {
+        !self.print_only
+    }
+}
+
+/// Records each POST and answers with `reply`, so an Alert channel's request
+/// can be checked without the network.
+pub struct RecordingPost {
+    pub requests: RefCell<Vec<PostRequest>>,
+    pub reply: Result<(), String>,
+}
+
+impl RecordingPost {
+    pub fn ok() -> Self {
+        Self {
+            requests: RefCell::new(Vec::new()),
+            reply: Ok(()),
+        }
+    }
+}
+
+impl HttpPost for RecordingPost {
+    fn post(&self, request: &PostRequest) -> anyhow::Result<()> {
+        self.requests.borrow_mut().push(request.clone());
+        self.reply.clone().map_err(anyhow::Error::msg)
+    }
+}
+
+/// A request written the way the recorded fixtures are: the method and URL,
+/// one header per line, a blank line, then the body.
+pub fn render_request(request: &PostRequest) -> String {
+    let mut text = format!("POST {}\n", request.url);
+    for (name, value) in &request.headers {
+        text.push_str(&format!("{name}: {value}\n"));
+    }
+    text.push('\n');
+    text.push_str(&request.body);
+    text
 }
 
 pub fn profile(countries: &[&str]) -> Profile {
@@ -145,6 +191,16 @@ impl Harness {
         today: NaiveDate,
         options: RunOptions,
     ) -> RunOutcome {
+        self.try_run(sources, today, options)
+            .expect("the Run failed")
+    }
+
+    pub fn try_run(
+        &mut self,
+        sources: &[Box<dyn Source>],
+        today: NaiveDate,
+        options: RunOptions,
+    ) -> anyhow::Result<RunOutcome> {
         run::run(
             RunDeps {
                 profile: &self.profile,
@@ -155,7 +211,6 @@ impl Harness {
             },
             options,
         )
-        .expect("the Run failed")
     }
 
     pub fn stored_names(&self) -> Vec<String> {
@@ -163,6 +218,17 @@ impl Harness {
             .hackathons()
             .unwrap()
             .into_iter()
+            .map(|h| h.name)
+            .collect()
+    }
+
+    /// The stored Hackathons an Alert has announced, soonest first.
+    pub fn announced_names(&self) -> Vec<String> {
+        self.store
+            .hackathons()
+            .unwrap()
+            .into_iter()
+            .filter(|h| h.announced_on.is_some())
             .map(|h| h.name)
             .collect()
     }
