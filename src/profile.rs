@@ -4,6 +4,7 @@ use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use chrono::{NaiveTime, Weekday};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,6 +14,8 @@ pub struct Profile {
     pub countries: Vec<String>,
     /// Where Alerts go. Without one, Alerts are printed instead of sent.
     pub alert_channel: Option<AlertChannelSetting>,
+    /// When scheduled Runs happen.
+    pub schedule: Schedule,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,6 +74,8 @@ struct ProfileFile {
     home: HomeFile,
     countries: Vec<String>,
     alert_channel: Option<AlertChannelFile>,
+    #[serde(default)]
+    schedule: ScheduleFile,
 }
 
 #[derive(Deserialize)]
@@ -152,6 +157,8 @@ impl Profile {
             .alert_channel
             .and_then(|channel| alert_channel(channel, &mut problems));
 
+        let schedule = Schedule::from_file(file.schedule, &mut problems);
+
         if !problems.is_empty() {
             return Err(ProfileError::Invalid {
                 path: path.to_owned(),
@@ -162,6 +169,7 @@ impl Profile {
             home: Home { city, airports },
             countries,
             alert_channel,
+            schedule,
         })
     }
 
@@ -226,6 +234,99 @@ fn ntfy(file: AlertChannelFile, problems: &mut Vec<String>) -> Option<NtfySettin
     })
 }
 
+/// When scheduled Runs happen: on these days, at this local time. It is read from
+/// the optional `[schedule]` section and defaults to Monday and Thursday at 08:00.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Schedule {
+    /// Monday first, each day once.
+    pub days: Vec<Weekday>,
+    /// Local time, to the minute.
+    pub time: NaiveTime,
+}
+
+impl Default for Schedule {
+    fn default() -> Self {
+        Schedule {
+            days: vec![Weekday::Mon, Weekday::Thu],
+            time: NaiveTime::from_hms_opt(8, 0, 0).expect("08:00 is a valid time"),
+        }
+    }
+}
+
+impl fmt::Display for Schedule {
+    /// Such as "every Monday and Thursday at 08:00".
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let names: Vec<&str> = self.days.iter().map(|d| day_name(*d)).collect();
+        let days = match names.split_last() {
+            Some((last, [])) => (*last).to_owned(),
+            Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+            None => String::new(),
+        };
+        write!(f, "every {days} at {}", self.time.format("%H:%M"))
+    }
+}
+
+fn day_name(day: Weekday) -> &'static str {
+    match day {
+        Weekday::Mon => "Monday",
+        Weekday::Tue => "Tuesday",
+        Weekday::Wed => "Wednesday",
+        Weekday::Thu => "Thursday",
+        Weekday::Fri => "Friday",
+        Weekday::Sat => "Saturday",
+        Weekday::Sun => "Sunday",
+    }
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct ScheduleFile {
+    days: Option<Vec<String>>,
+    time: Option<String>,
+}
+
+impl Schedule {
+    fn from_file(file: ScheduleFile, problems: &mut Vec<String>) -> Self {
+        let default = Schedule::default();
+
+        let days = match file.days {
+            None => default.days,
+            Some(raw_days) => {
+                if raw_days.is_empty() {
+                    problems.push(
+                        "schedule.days is empty; list at least one day, such as \"Monday\""
+                            .to_owned(),
+                    );
+                }
+                let mut days = Vec::new();
+                for raw in &raw_days {
+                    match raw.trim().parse::<Weekday>() {
+                        Ok(day) if !days.contains(&day) => days.push(day),
+                        Ok(_) => {}
+                        Err(_) => problems.push(format!(
+                            "schedule.days: {raw:?} is not a day of the week, such as \"Monday\""
+                        )),
+                    }
+                }
+                days.sort_by_key(Weekday::num_days_from_monday);
+                days
+            }
+        };
+
+        let time = match file.time {
+            None => default.time,
+            Some(raw) => NaiveTime::parse_from_str(raw.trim(), "%H:%M").unwrap_or_else(|_| {
+                problems.push(format!(
+                    "schedule.time: {raw:?} is not a 24-hour local time such as \"08:00\""
+                ));
+                default.time
+            }),
+        };
+
+        Schedule { days, time }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,6 +356,7 @@ mod tests {
                 },
                 countries: vec!["Belgium".into(), "France".into()],
                 alert_channel: None,
+                schedule: Schedule::default(),
             }
         );
         assert!(profile.includes_country("belgium"));
@@ -398,5 +500,82 @@ mod tests {
             profile.alert_channel,
             Some(AlertChannelSetting::Ntfy(_))
         ));
+        // And so is its commented-out schedule block.
+        let uncommented = text
+            .replace("# [schedule]", "[schedule]")
+            .replace("# days = ", "days = ")
+            .replace("# time = ", "time = ");
+        let profile = Profile::from_toml(&uncommented, &path).unwrap();
+        assert_eq!(profile.schedule, Schedule::default());
+    }
+
+    #[test]
+    fn the_schedule_defaults_to_monday_and_thursday_at_eight() {
+        let profile = parse(HOME).unwrap();
+        assert_eq!(profile.schedule.days, vec![Weekday::Mon, Weekday::Thu]);
+        assert_eq!(
+            profile.schedule.time,
+            NaiveTime::from_hms_opt(8, 0, 0).unwrap()
+        );
+        assert_eq!(
+            profile.schedule.to_string(),
+            "every Monday and Thursday at 08:00"
+        );
+    }
+
+    #[test]
+    fn reads_a_custom_schedule() {
+        let profile = parse(&format!(
+            "{HOME}[schedule]\ndays = [\"sunday\", \" Wed \", \"Friday\", \"wednesday\"]\ntime = \"21:45\"\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            profile.schedule,
+            Schedule {
+                days: vec![Weekday::Wed, Weekday::Fri, Weekday::Sun],
+                time: NaiveTime::from_hms_opt(21, 45, 0).unwrap(),
+            }
+        );
+        assert_eq!(
+            profile.schedule.to_string(),
+            "every Wednesday, Friday and Sunday at 21:45"
+        );
+    }
+
+    #[test]
+    fn a_partial_schedule_keeps_the_other_default() {
+        let profile = parse(&format!("{HOME}[schedule]\ntime = \"06:30\"\n")).unwrap();
+        assert_eq!(
+            profile.schedule.to_string(),
+            "every Monday and Thursday at 06:30"
+        );
+        let profile = parse(&format!("{HOME}[schedule]\ndays = [\"Tue\"]\n")).unwrap();
+        assert_eq!(profile.schedule.to_string(), "every Tuesday at 08:00");
+    }
+
+    #[test]
+    fn a_bad_schedule_is_reported() {
+        let err = parse(&format!(
+            "{HOME}[schedule]\ndays = [\"Mondey\"]\ntime = \"8am\"\n"
+        ))
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "the Profile at profile.toml is invalid:\n\
+             \x20 - schedule.days: \"Mondey\" is not a day of the week, such as \"Monday\"\n\
+             \x20 - schedule.time: \"8am\" is not a 24-hour local time such as \"08:00\""
+        );
+    }
+
+    #[test]
+    fn a_schedule_needs_a_day() {
+        let err = parse(&format!("{HOME}[schedule]\ndays = []\n")).unwrap_err();
+        assert!(err.to_string().contains("schedule.days is empty"), "{err}");
+    }
+
+    #[test]
+    fn unknown_schedule_keys_are_refused() {
+        let err = parse(&format!("{HOME}[schedule]\nhour = 8\n")).unwrap_err();
+        assert!(err.to_string().contains("hour"), "{err}");
     }
 }

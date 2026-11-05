@@ -23,6 +23,20 @@ Without `--dry-run`, the Alert goes to the Alert channel in your Profile. For no
 
 Your Profile is a small TOML file with your Home, Countries and Alert channel; see [`examples/profile.toml`](examples/profile.toml). By default it is read from `~/.config/hackathon-radar/profile.toml` and the database lives at `~/.local/share/hackathon-radar/hackathon-radar.sqlite` (both honour `XDG_CONFIG_HOME` and `XDG_DATA_HOME`). Pass `--profile` and `--db` to use other paths.
 
+## Schedule
+
+`hackathon-radar schedule install` runs a Run for you every Monday and Thursday at 08:00 local time, or on the days and time in your Profile's optional `[schedule]` section (see [`examples/profile.toml`](examples/profile.toml)). On macOS it installs a launchd agent in `~/Library/LaunchAgents`; on Linux, a systemd user timer in `~/.config/systemd/user`. Each Run appends its output to `~/.local/state/hackathon-radar/run.log` (honouring `XDG_STATE_HOME`).
+
+```sh
+hackathon-radar schedule install    # pass --profile and --db as for `run`; run it again after changing the schedule
+hackathon-radar schedule status
+hackathon-radar schedule uninstall
+```
+
+launchd and systemd give scheduled jobs only a minimal `PATH`, so `schedule install` saves your shell's `PATH` into the schedule; that is how a Run finds your Agent's CLI (`claude`, `codex`). If your shell has no `PATH`, it falls back to `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin` on macOS or `/usr/local/bin:/usr/bin:/bin` on Linux. If you install or move a tool later, run `schedule install` again to refresh it.
+
+The schedule runs the binary you installed it from, so install the binary first (`cargo install --path .`) rather than scheduling a `target/` build. On Linux, systemd only runs user timers while you're logged in unless you enable lingering (`loginctl enable-linger`).
+
 ## Development
 
 ```sh

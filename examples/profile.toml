@@ -18,3 +18,9 @@ airports = ["BRU", "CRL"]
 # [alert_channel]
 # kind = "ntfy"
 # topic = "hackathon-radar-example-7f3k9q"
+
+# When `hackathon-radar schedule install` runs a Run, in local time. Optional:
+# without it, Runs happen every Monday and Thursday at 08:00.
+# [schedule]
+# days = ["Monday", "Thursday"]
+# time = "08:00"
