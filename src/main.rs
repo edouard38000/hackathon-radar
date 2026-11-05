@@ -74,6 +74,9 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
     let sources: Vec<Box<dyn Source>> = vec![Box::new(HackathonBe::new(HttpClient::new()))];
     let mut channel = alert_channel(&profile);
     let agent = agent::from_settings(&profile.agent);
+    if let Some(warning) = agent.warning() {
+        eprintln!("warning: {warning}");
+    }
 
     let outcome = run::run(
         RunDeps {
