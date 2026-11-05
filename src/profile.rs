@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use chrono::{NaiveTime, Weekday};
 use serde::Deserialize;
 
+use crate::agent::command::CommandTemplate;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Profile {
     pub home: Home,
@@ -63,6 +65,9 @@ pub struct AgentSettings {
     /// The most Agent steps (turns) one Run may use.
     #[serde(default = "default_max_turns")]
     pub max_turns: u32,
+    /// The command template for `adapter = "command"`; set only with that adapter.
+    #[serde(default)]
+    pub command: Option<CommandTemplate>,
 }
 
 /// The Agents hackathon-radar can run.
@@ -72,6 +77,21 @@ pub enum AgentAdapter {
     /// Claude Code, run headless with `claude -p`.
     #[default]
     ClaudeCode,
+    /// Codex, run headless with `codex exec` in a read-only sandbox.
+    Codex,
+    /// Any other coding agent, run from the command template in `agent.command`.
+    Command,
+}
+
+impl AgentAdapter {
+    /// The name the Profile uses for it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AgentAdapter::ClaudeCode => "claude-code",
+            AgentAdapter::Codex => "codex",
+            AgentAdapter::Command => "command",
+        }
+    }
 }
 
 /// Enough for a Run's batch of Candidates, each needing a page read or a search or two.
@@ -86,6 +106,7 @@ impl Default for AgentSettings {
         Self {
             adapter: AgentAdapter::default(),
             max_turns: DEFAULT_MAX_TURNS,
+            command: None,
         }
     }
 }
@@ -224,6 +245,19 @@ impl Profile {
 
         if file.agent.max_turns == 0 {
             problems.push("agent.max_turns is 0; the Agent needs at least one step".to_owned());
+        }
+        match (file.agent.adapter, &file.agent.command) {
+            (AgentAdapter::Command, None) => problems.push(
+                "agent.command is missing; adapter = \"command\" runs the command you give, \
+                 such as command = [\"my-agent\", \"--schema\", \"{schema_file}\"]"
+                    .to_owned(),
+            ),
+            (AgentAdapter::Command, Some(_)) | (_, None) => {}
+            (other, Some(_)) => problems.push(format!(
+                "agent.command is only used with adapter = \"command\", but agent.adapter is \
+                 {:?}; remove agent.command or set adapter = \"command\"",
+                other.as_str()
+            )),
         }
 
         if !problems.is_empty() {
@@ -430,6 +464,7 @@ mod tests {
                 agent: AgentSettings {
                     adapter: AgentAdapter::ClaudeCode,
                     max_turns: DEFAULT_MAX_TURNS,
+                    command: None,
                 },
             }
         );
@@ -515,7 +550,67 @@ mod tests {
             AgentSettings {
                 adapter: AgentAdapter::ClaudeCode,
                 max_turns: 12,
+                command: None,
             }
+        );
+    }
+
+    #[test]
+    fn the_agent_setting_selects_codex_or_a_command() {
+        let base = "countries = [\"Belgium\"]\n[home]\ncity = \"Lyon\"\nairports = [\"LYS\"]\n";
+        let codex = parse(&format!("{base}[agent]\nadapter = \"codex\"\n")).unwrap();
+        assert_eq!(codex.agent.adapter, AgentAdapter::Codex);
+        assert_eq!(codex.agent.command, None);
+
+        let command = parse(&format!(
+            "{base}[agent]\nadapter = \"command\"\ncommand = [\"my-agent\", \"--schema\", \"{{schema_file}}\"]\n"
+        ))
+        .unwrap();
+        assert_eq!(command.agent.adapter, AgentAdapter::Command);
+        let template = command.agent.command.expect("a command template");
+        assert_eq!(template.program(), "my-agent");
+    }
+
+    #[test]
+    fn a_command_adapter_needs_a_valid_command_and_only_it_takes_one() {
+        let base = "countries = [\"Belgium\"]\n[home]\ncity = \"Lyon\"\nairports = [\"LYS\"]\n";
+        let missing = parse(&format!("{base}[agent]\nadapter = \"command\"\n")).unwrap_err();
+        assert!(
+            missing.to_string().contains("agent.command is missing"),
+            "{missing}"
+        );
+
+        let empty = parse(&format!(
+            "{base}[agent]\nadapter = \"command\"\ncommand = []\n"
+        ))
+        .unwrap_err();
+        assert!(
+            empty
+                .to_string()
+                .contains("agent.command: the command is empty"),
+            "{empty}"
+        );
+
+        let unknown = parse(&format!(
+            "{base}[agent]\nadapter = \"command\"\ncommand = [\"my-agent\", \"{{schema_path}}\"]\n"
+        ))
+        .unwrap_err();
+        assert!(
+            unknown
+                .to_string()
+                .contains("{schema_path} in \"{schema_path}\" is not a placeholder"),
+            "{unknown}"
+        );
+
+        let stray = parse(&format!(
+            "{base}[agent]\nadapter = \"codex\"\ncommand = [\"my-agent\"]\n"
+        ))
+        .unwrap_err();
+        assert!(
+            stray
+                .to_string()
+                .contains("agent.command is only used with adapter = \"command\""),
+            "{stray}"
         );
     }
 
@@ -524,6 +619,8 @@ mod tests {
         let base = "countries = [\"Belgium\"]\n[home]\ncity = \"Lyon\"\nairports = [\"LYS\"]\n";
         let err = parse(&format!("{base}[agent]\nadapter = \"skynet\"\n")).unwrap_err();
         assert!(err.to_string().contains("claude-code"), "{err}");
+        assert!(err.to_string().contains("codex"), "{err}");
+        assert!(err.to_string().contains("command"), "{err}");
         let err = parse(&format!("{base}[agent]\nmax_turns = 0\n")).unwrap_err();
         assert!(err.to_string().contains("agent.max_turns is 0"), "{err}");
     }
@@ -628,6 +725,21 @@ mod tests {
             .replace("# time = ", "time = ");
         let profile = Profile::from_toml(&uncommented, &path).unwrap();
         assert_eq!(profile.schedule, Schedule::default());
+        // And so are its commented-out Codex and command adapters, each in place
+        // of Claude Code.
+        let without_claude = text.replace("adapter = \"claude-code\"\n", "");
+        let uncommented = without_claude.replace("# adapter = \"codex\"", "adapter = \"codex\"");
+        let profile = Profile::from_toml(&uncommented, &path).unwrap();
+        assert_eq!(profile.agent.adapter, AgentAdapter::Codex);
+        let uncommented = without_claude
+            .replace("# adapter = \"command\"", "adapter = \"command\"")
+            .replace("# command = ", "command = ");
+        let profile = Profile::from_toml(&uncommented, &path).unwrap();
+        assert_eq!(profile.agent.adapter, AgentAdapter::Command);
+        assert_eq!(
+            profile.agent.command.map(|c| c.program().to_owned()),
+            Some("my-agent".to_owned())
+        );
     }
 
     #[test]

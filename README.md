@@ -13,7 +13,7 @@ A self-hosted hackathon tracker. An AI agent running on your own machine finds h
 
 ## Try it
 
-`hackathon-radar run --dry-run` reads the [hackathon.be](https://hackathon.be) calendar, keeps the listings that haven't ended and are in your Profile's Countries, asks your Agent (Claude Code) which of them are real Hackathons you're eligible for and which are Travel-funded, stores the results in a local SQLite database, and prints the Alert it would send. A dry run sends nothing and marks nothing as Announced.
+`hackathon-radar run --dry-run` reads the [hackathon.be](https://hackathon.be) calendar, keeps the listings that haven't ended and are in your Profile's Countries, asks your Agent (Claude Code, Codex or another coding agent) which of them are real Hackathons you're eligible for and which are Travel-funded, stores the results in a local SQLite database, and prints the Alert it would send. A dry run sends nothing and marks nothing as Announced.
 
 ```sh
 cargo run -- run --dry-run --profile examples/profile.toml
@@ -39,15 +39,44 @@ The schedule runs the binary you installed it from, so install the binary first 
 
 ### The Agent
 
-Each Run sends the listings that passed the Profile's rules to [Claude Code](https://claude.com/claude-code), run headless on your own `claude` login (or `ANTHROPIC_API_KEY`, if you set it). hackathon-radar never signs you in; if `claude` isn't signed in, run `claude` once yourself. The Agent may only search and read the web:
+Each Run sends the listings that passed the Profile's rules to your Agent, chosen with `agent.adapter` in your Profile: `claude-code` (the default), `codex`, or `command` for any other coding agent. Whichever it is, the Agent may only search and read the web. It runs in an empty temporary directory, gets the prompt on stdin (or, with a command template, wherever you place it), and must answer with JSON matching the schema. The prompt and schema are built into hackathon-radar, and the answer is checked against the schema; if the Agent fails or answers in the wrong shape, the listings are kept and sent again on the next Run. A request that runs longer than 30 minutes is stopped. `[eligibility]` holds the facts organisers restrict on. hackathon-radar never signs you in to an Agent.
+
+**Claude Code** (`adapter = "claude-code"`) runs headless on your own `claude` login (or `ANTHROPIC_API_KEY`, if you set it). If `claude` isn't signed in, run `claude` once yourself.
 
 ```sh
 claude -p --permission-mode dontAsk --tools WebSearch,WebFetch --allowedTools WebSearch,WebFetch --strict-mcp-config --setting-sources "" --max-turns <cap> --output-format json --json-schema <schema>
 ```
 
-It loads none of your Claude Code settings, hooks or MCP servers, so nothing you've allowed for your own work applies to it.
+It loads none of your Claude Code settings, hooks or MCP servers, so nothing you've allowed for your own work applies to it. The step cap is `agent.max_turns` in your Profile (50 by default).
 
-The prompt goes on stdin. The prompt and schema are built into hackathon-radar, and its answer is checked against the schema; if the Agent fails or answers in the wrong shape, the listings are kept and sent again on the next Run. The step cap is `agent.max_turns` in your Profile (50 by default), and `[eligibility]` holds the facts organisers restrict on.
+**Codex** (`adapter = "codex"`) runs headless on your own `codex` login (or `CODEX_API_KEY`, if you set it). If `codex` isn't signed in, run `codex login` once yourself.
+
+```sh
+codex exec --sandbox read-only --skip-git-repo-check --ephemeral --ignore-user-config --ignore-rules -c approval_policy="never" -c web_search="live" -c features.shell_tool=false -c features.view_image=false --output-schema <schema file> --json -
+```
+
+The sandbox is read-only and nothing is ever approved; the shell and local-image tools are turned off, so live web search (which also opens pages) is all it has. It loads none of your `config.toml` (so none of your MCP servers or sandbox settings) and none of your execpolicy rules, and keeps no session files. Codex has no step cap of its own, so `agent.max_turns` doesn't apply to it; the 30-minute limit does.
+
+**Any other coding agent** (`adapter = "command"`) runs from a command template in your Profile:
+
+```toml
+[agent]
+adapter = "command"
+command = ["my-agent", "--json", "--schema", "{schema_file}"]
+```
+
+The first entry is the program; the rest are its arguments. The command runs without a shell, so each entry reaches the program as one argument, exactly as written: no quoting, globbing, `~` or `$VAR` expansion. These placeholders are filled in, alone or inside an argument (write `{{` and `}}` for literal braces):
+
+| Placeholder | Becomes |
+| --- | --- |
+| `{schema_file}` | the path of a file holding the JSON schema |
+| `{schema}` | the JSON schema itself |
+| `{prompt}` | the whole prompt; when you use it, stdin stays empty |
+| `{max_turns}` | `agent.max_turns` from your Profile |
+
+The agent must print only the JSON answer on stdout and exit with code 0; anything else counts as the Agent failing, and the listings wait for the next Run.
+
+**A generic agent must be read-only, and that is up to you.** hackathon-radar can't see inside another agent, so your command must give it web search and page reading and nothing else: no shell, no file writes, no MCP servers or other tools, and no flag that skips permissions or makes its sandbox writable. It reads arbitrary web pages on every Run, unattended, and must not be able to act on anything it reads there. hackathon-radar rejects any answer that doesn't match the schema, but it can't stop an agent you've given more power from using it.
 
 ## Development
 

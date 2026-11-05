@@ -35,3 +35,18 @@ nationalities = ["Belgian"]
 [agent]
 adapter = "claude-code"
 max_turns = 50
+
+# To use Codex instead, replace the adapter line above with the one below. It
+# runs `codex exec` in a read-only sandbox with live web search, on your own
+# `codex` login (or CODEX_API_KEY). Codex has no step cap of its own, so
+# max_turns doesn't apply to it.
+# adapter = "codex"
+
+# To use any other coding agent, replace the adapter line above with the two
+# lines below and give your agent's command. It runs without a shell, in an
+# empty directory, with the prompt on stdin, and must print only JSON matching the
+# schema. You must make it read-only: web search and page reading, nothing else
+# (see the README). Placeholders: {schema_file} (the schema's path), {schema}
+# (the schema itself), {prompt} (then stdin stays empty) and {max_turns}.
+# adapter = "command"
+# command = ["my-agent", "--json", "--schema", "{schema_file}"]

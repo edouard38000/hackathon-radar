@@ -9,13 +9,19 @@
 //! instructions are compiled into the binary (ADR 0006).
 
 pub mod claude_code;
+pub mod codex;
+pub mod command;
 
 use std::collections::HashSet;
+use std::path::PathBuf;
+use std::time::Duration;
 
+use anyhow::Context;
 use serde::{Deserialize, Deserializer, Serialize};
+use tempfile::TempDir;
 
 use crate::candidate::Candidate;
-use crate::process::SystemRunner;
+use crate::process::{Output, SystemRunner};
 use crate::profile::{AgentAdapter, AgentSettings, Eligibility, Profile};
 
 /// The instructions every Agent runs with. `{{eligibility}}` and `{{candidates}}`
@@ -27,6 +33,9 @@ pub const SCHEMA: &str = include_str!("judgements.schema.json");
 
 /// The instructions are versioned with the binary they ship in (ADR 0006).
 pub const INSTRUCTIONS_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// How long one request may take before the Agent is stopped.
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 pub trait Agent {
     /// A short, stable name, stored with each judgement, such as `claude-code`.
@@ -45,7 +54,57 @@ pub fn from_settings(settings: &AgentSettings) -> Box<dyn Agent> {
             SystemRunner,
             settings.max_turns,
         )),
+        AgentAdapter::Codex => Box::new(codex::Codex::new(SystemRunner)),
+        AgentAdapter::Command => Box::new(command::Generic::new(
+            SystemRunner,
+            settings
+                .command
+                .clone()
+                .expect("a valid Profile with adapter = \"command\" has agent.command"),
+            settings.max_turns,
+        )),
     }
+}
+
+/// Where an Agent runs: an empty working directory, so no project's files or
+/// settings are in reach, and the schema written to a file outside it, for
+/// Agents that take the schema as a path. Both are removed when this is dropped.
+pub(crate) struct Scratch {
+    pub work: TempDir,
+    pub schema_file: PathBuf,
+    _files: TempDir,
+}
+
+impl Scratch {
+    pub(crate) fn new(schema: &str) -> anyhow::Result<Self> {
+        let work = tempfile::tempdir().context("creating a working directory for the Agent")?;
+        let files = tempfile::tempdir().context("creating a directory for the Agent's schema")?;
+        let schema_file = files.path().join("judgements.schema.json");
+        std::fs::write(&schema_file, schema).context("writing the Agent's schema file")?;
+        Ok(Self {
+            work,
+            schema_file,
+            _files: files,
+        })
+    }
+}
+
+/// How a program ended, for error messages.
+pub(crate) fn exit(output: &Output) -> String {
+    match output.code {
+        Some(code) => format!("exit code {code}"),
+        None => "stopped by a signal".to_owned(),
+    }
+}
+
+/// The end of a long error output, which is where the reason usually is.
+pub(crate) fn tail(text: &str) -> String {
+    let text = text.trim();
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= 500 {
+        return text.to_owned();
+    }
+    format!("…{}", chars[chars.len() - 500..].iter().collect::<String>())
 }
 
 /// One request to an Agent: Candidates that passed the data-only rules, and the

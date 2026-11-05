@@ -10,7 +10,7 @@ use anyhow::Context;
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::{Agent, JudgeRequest};
+use super::{Agent, JudgeRequest, exit, tail};
 use crate::process::{Command, Output, ProcessRunner};
 
 pub const PROGRAM: &str = "claude";
@@ -19,7 +19,7 @@ pub const PROGRAM: &str = "claude";
 pub const ALLOWED_TOOLS: &str = "WebSearch,WebFetch";
 
 /// How long one request may take before the Agent is stopped.
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+pub const DEFAULT_TIMEOUT: Duration = super::DEFAULT_TIMEOUT;
 
 const SIGN_IN_HINT: &str = "If Claude Code isn't signed in, run `claude` once yourself and sign in \
      with your own account, or set ANTHROPIC_API_KEY.";
@@ -139,21 +139,4 @@ struct ResultMessage {
     is_error: bool,
     result: Option<String>,
     structured_output: Option<Value>,
-}
-
-fn exit(output: &Output) -> String {
-    match output.code {
-        Some(code) => format!("exit code {code}"),
-        None => "stopped by a signal".to_owned(),
-    }
-}
-
-/// The end of a long error output, which is where the reason usually is.
-fn tail(text: &str) -> String {
-    let text = text.trim();
-    let chars: Vec<char> = text.chars().collect();
-    if chars.len() <= 500 {
-        return text.to_owned();
-    }
-    format!("…{}", chars[chars.len() - 500..].iter().collect::<String>())
 }
