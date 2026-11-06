@@ -1,8 +1,15 @@
 # An example Profile. Copy it to ~/.config/hackathon-radar/profile.toml
 # (or pass it with --profile) and change it to suit you. It holds no secrets.
 
-# The countries you'll travel to at your own cost.
+# The countries you'll travel to at your own cost. A region stands for its
+# members: "Schengen", "European Union" (or "EU"), "EEA", "Europe", "Benelux",
+# "DACH", "Nordics", "North America", and US regions "US West Coast",
+# "US East Coast" and "US Northeast". A US state counts too ("California", "TX").
 countries = ["Belgium", "France", "Netherlands", "Luxembourg"]
+
+# The currency you count money in, as an ISO code. Optional: without it, the
+# currency of Home's country (the euro if it isn't known).
+# currency = "EUR"
 
 # The city you travel from, its country (optional; with it, train trips within
 # that country count as local), and the airports you fly out of (IATA codes).
@@ -95,9 +102,14 @@ max_turns = 50
 # adapter = "command"
 # command = ["my-agent", "--json", "--schema", "{schema_file}"]
 
-# Sources. Optional: hackathon.be, hackathonhub.eu, Luma and Devpost are always
-# read. Add your own ICS calendar feeds here. A Run fetches at most
+# Sources. Optional: the global Sources (Devpost, MLH, ETHGlobal, the CASSINI
+# Hackathons and dev.events) are always read, and so is the Source pack for
+# Home's country: "europe" (hackathon.be, hackathonhub.eu and European Luma
+# calendars) or "north-america" (MLH in the Americas, and Luma's San Francisco,
+# New York and Boston calendars). Add other packs with `packs`, and your own
+# ICS calendar feeds with `ics`. A Run fetches at most
 # `hackathonhub_pages_per_run` new hackathonhub.eu event pages (default 40).
 # [sources]
+# packs = ["north-america"]
 # ics = ["https://example.org/community-hackathons.ics"]
 # hackathonhub_pages_per_run = 40

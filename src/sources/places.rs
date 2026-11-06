@@ -10,6 +10,8 @@
 struct City {
     name: &'static str,
     country: &'static str,
+    /// The US state or Canadian province code, such as `CA` or `ON`.
+    region: Option<&'static str>,
     lat: f64,
     lon: f64,
     aliases: &'static [&'static str],
@@ -25,11 +27,70 @@ const fn city(
     City {
         name,
         country,
+        region: None,
         lat,
         lon,
         aliases,
     }
 }
+
+/// A city in the United States, in the state with this code.
+const fn us(
+    name: &'static str,
+    state: &'static str,
+    lat: f64,
+    lon: f64,
+    aliases: &'static [&'static str],
+) -> City {
+    City {
+        region: Some(state),
+        ..city(name, UNITED_STATES, lat, lon, aliases)
+    }
+}
+
+/// A city in Canada, in the province with this code.
+const fn ca(
+    name: &'static str,
+    province: &'static str,
+    lat: f64,
+    lon: f64,
+    aliases: &'static [&'static str],
+) -> City {
+    City {
+        region: Some(province),
+        ..city(name, CANADA, lat, lon, aliases)
+    }
+}
+
+pub const UNITED_STATES: &str = "United States";
+pub const CANADA: &str = "Canada";
+
+/// The US states and the District of Columbia: code and name.
+#[rustfmt::skip]
+pub const US_STATES: &[(&str, &str)] = &[
+    ("AL", "Alabama"), ("AK", "Alaska"), ("AZ", "Arizona"), ("AR", "Arkansas"),
+    ("CA", "California"), ("CO", "Colorado"), ("CT", "Connecticut"), ("DE", "Delaware"),
+    ("DC", "District of Columbia"), ("FL", "Florida"), ("GA", "Georgia"), ("HI", "Hawaii"),
+    ("ID", "Idaho"), ("IL", "Illinois"), ("IN", "Indiana"), ("IA", "Iowa"),
+    ("KS", "Kansas"), ("KY", "Kentucky"), ("LA", "Louisiana"), ("ME", "Maine"),
+    ("MD", "Maryland"), ("MA", "Massachusetts"), ("MI", "Michigan"), ("MN", "Minnesota"),
+    ("MS", "Mississippi"), ("MO", "Missouri"), ("MT", "Montana"), ("NE", "Nebraska"),
+    ("NV", "Nevada"), ("NH", "New Hampshire"), ("NJ", "New Jersey"), ("NM", "New Mexico"),
+    ("NY", "New York"), ("NC", "North Carolina"), ("ND", "North Dakota"), ("OH", "Ohio"),
+    ("OK", "Oklahoma"), ("OR", "Oregon"), ("PA", "Pennsylvania"), ("RI", "Rhode Island"),
+    ("SC", "South Carolina"), ("SD", "South Dakota"), ("TN", "Tennessee"), ("TX", "Texas"),
+    ("UT", "Utah"), ("VT", "Vermont"), ("VA", "Virginia"), ("WA", "Washington"),
+    ("WV", "West Virginia"), ("WI", "Wisconsin"), ("WY", "Wyoming"),
+];
+
+/// Canada's provinces and territories: code and name.
+#[rustfmt::skip]
+const CANADIAN_PROVINCES: &[(&str, &str)] = &[
+    ("AB", "Alberta"), ("BC", "British Columbia"), ("MB", "Manitoba"), ("NB", "New Brunswick"),
+    ("NL", "Newfoundland and Labrador"), ("NS", "Nova Scotia"), ("NT", "Northwest Territories"),
+    ("NU", "Nunavut"), ("ON", "Ontario"), ("PE", "Prince Edward Island"), ("QC", "Quebec"),
+    ("SK", "Saskatchewan"), ("YT", "Yukon"),
+];
 
 #[rustfmt::skip]
 const CITIES: &[City] = &[
@@ -207,36 +268,112 @@ const CITIES: &[City] = &[
     city("Ankara", "Turkey", 39.93, 32.86, &[]),
     city("Tbilisi", "Georgia", 41.72, 44.79, &[]),
     city("Yerevan", "Armenia", 40.18, 44.51, &[]),
-    // North America
-    city("San Francisco", "United States", 37.77, -122.42, &["sf"]),
-    city("Palo Alto", "United States", 37.44, -122.14, &[]),
-    city("Mountain View", "United States", 37.39, -122.08, &[]),
-    city("San Jose", "United States", 37.34, -121.89, &[]),
-    city("Santa Clara", "United States", 37.35, -121.96, &[]),
-    city("Berkeley", "United States", 37.87, -122.27, &[]),
-    city("Los Angeles", "United States", 34.05, -118.24, &["la"]),
-    city("San Diego", "United States", 32.72, -117.16, &[]),
-    city("Seattle", "United States", 47.61, -122.33, &[]),
-    city("Portland", "United States", 45.52, -122.68, &[]),
-    city("New York", "United States", 40.71, -74.01, &["new york city", "nyc", "brooklyn", "manhattan"]),
-    city("Boston", "United States", 42.36, -71.06, &[]),
-    city("Philadelphia", "United States", 39.95, -75.17, &[]),
-    city("Washington", "United States", 38.91, -77.04, &["washington dc", "washington d c"]),
-    city("Chicago", "United States", 41.88, -87.63, &[]),
-    city("Austin", "United States", 30.27, -97.74, &[]),
-    city("Houston", "United States", 29.76, -95.37, &[]),
-    city("Dallas", "United States", 32.78, -96.80, &[]),
-    city("Atlanta", "United States", 33.75, -84.39, &[]),
-    city("Miami", "United States", 25.76, -80.19, &[]),
-    city("Denver", "United States", 39.74, -104.99, &[]),
-    city("Pittsburgh", "United States", 40.44, -79.99, &[]),
-    city("Toronto", "Canada", 43.65, -79.38, &[]),
-    city("Waterloo", "Canada", 43.46, -80.52, &[]),
-    city("Montreal", "Canada", 45.50, -73.57, &["montréal"]),
-    city("Vancouver", "Canada", 49.28, -123.12, &[]),
-    city("Ottawa", "Canada", 45.42, -75.70, &[]),
-    city("Calgary", "Canada", 51.05, -114.07, &[]),
+    // United States, with each city's state
+    us("San Francisco", "CA", 37.77, -122.42, &["sf"]),
+    us("Oakland", "CA", 37.80, -122.27, &[]),
+    us("Berkeley", "CA", 37.87, -122.27, &[]),
+    us("Palo Alto", "CA", 37.44, -122.14, &[]),
+    us("Stanford", "CA", 37.43, -122.17, &[]),
+    us("Menlo Park", "CA", 37.45, -122.18, &[]),
+    us("Redwood City", "CA", 37.49, -122.24, &[]),
+    us("Mountain View", "CA", 37.39, -122.08, &[]),
+    us("Sunnyvale", "CA", 37.37, -122.04, &[]),
+    us("Cupertino", "CA", 37.32, -122.03, &[]),
+    us("Santa Clara", "CA", 37.35, -121.96, &[]),
+    us("San Jose", "CA", 37.34, -121.89, &[]),
+    us("Sacramento", "CA", 38.58, -121.49, &[]),
+    us("Davis", "CA", 38.54, -121.74, &[]),
+    us("Santa Cruz", "CA", 36.97, -122.03, &[]),
+    us("Los Angeles", "CA", 34.05, -118.24, &["la"]),
+    us("Santa Monica", "CA", 34.02, -118.49, &[]),
+    us("Pasadena", "CA", 34.15, -118.14, &[]),
+    us("Irvine", "CA", 33.68, -117.83, &[]),
+    us("San Diego", "CA", 32.72, -117.16, &[]),
+    us("Santa Barbara", "CA", 34.42, -119.70, &[]),
+    us("Seattle", "WA", 47.61, -122.33, &[]),
+    us("Redmond", "WA", 47.67, -122.12, &[]),
+    us("Bellevue", "WA", 47.61, -122.20, &[]),
+    us("Portland", "OR", 45.52, -122.68, &[]),
+    us("Las Vegas", "NV", 36.17, -115.14, &[]),
+    us("Phoenix", "AZ", 33.45, -112.07, &[]),
+    us("Tempe", "AZ", 33.43, -111.94, &[]),
+    us("Tucson", "AZ", 32.22, -110.97, &[]),
+    us("Salt Lake City", "UT", 40.76, -111.89, &[]),
+    us("Denver", "CO", 39.74, -104.99, &[]),
+    us("Boulder", "CO", 40.01, -105.27, &[]),
+    us("Honolulu", "HI", 21.31, -157.86, &[]),
+    us("Austin", "TX", 30.27, -97.74, &[]),
+    us("Houston", "TX", 29.76, -95.37, &[]),
+    us("Dallas", "TX", 32.78, -96.80, &[]),
+    us("Richardson", "TX", 32.95, -96.73, &[]),
+    us("San Antonio", "TX", 29.42, -98.49, &[]),
+    us("College Station", "TX", 30.63, -96.33, &[]),
+    us("Chicago", "IL", 41.88, -87.63, &[]),
+    us("Evanston", "IL", 42.05, -87.69, &[]),
+    us("Champaign", "IL", 40.12, -88.24, &["urbana champaign", "urbana"]),
+    us("Minneapolis", "MN", 44.98, -93.27, &[]),
+    us("Madison", "WI", 43.07, -89.40, &[]),
+    us("Milwaukee", "WI", 43.04, -87.91, &[]),
+    us("Detroit", "MI", 42.33, -83.05, &[]),
+    us("Ann Arbor", "MI", 42.28, -83.74, &[]),
+    us("Columbus", "OH", 39.96, -83.00, &[]),
+    us("Cleveland", "OH", 41.50, -81.69, &[]),
+    us("Cincinnati", "OH", 39.10, -84.51, &[]),
+    us("Indianapolis", "IN", 39.77, -86.16, &[]),
+    us("West Lafayette", "IN", 40.43, -86.91, &[]),
+    us("St. Louis", "MO", 38.63, -90.20, &["st louis", "saint louis"]),
+    us("Kansas City", "MO", 39.10, -94.58, &[]),
+    us("Nashville", "TN", 36.16, -86.78, &[]),
+    us("Atlanta", "GA", 33.75, -84.39, &[]),
+    us("Miami", "FL", 25.76, -80.19, &[]),
+    us("Orlando", "FL", 28.54, -81.38, &[]),
+    us("Tampa", "FL", 27.95, -82.46, &[]),
+    us("Gainesville", "FL", 29.65, -82.32, &[]),
+    us("Charlotte", "NC", 35.23, -80.84, &[]),
+    us("Raleigh", "NC", 35.78, -78.64, &[]),
+    us("Durham", "NC", 35.99, -78.90, &[]),
+    us("Chapel Hill", "NC", 35.91, -79.06, &[]),
+    us("Washington", "DC", 38.91, -77.04, &["washington dc", "washington d c"]),
+    us("Baltimore", "MD", 39.29, -76.61, &[]),
+    us("College Park", "MD", 38.98, -76.94, &[]),
+    us("Philadelphia", "PA", 39.95, -75.17, &[]),
+    us("Pittsburgh", "PA", 40.44, -79.99, &[]),
+    us("Princeton", "NJ", 40.36, -74.66, &[]),
+    us("Newark", "NJ", 40.74, -74.17, &[]),
+    us("New York", "NY", 40.71, -74.01, &["new york city", "nyc", "brooklyn", "manhattan"]),
+    us("Ithaca", "NY", 42.44, -76.50, &[]),
+    us("Rochester", "NY", 43.16, -77.61, &[]),
+    us("Buffalo", "NY", 42.89, -78.88, &[]),
+    us("Troy", "NY", 42.73, -73.69, &[]),
+    us("New Haven", "CT", 41.31, -72.92, &[]),
+    us("Providence", "RI", 41.82, -71.41, &[]),
+    us("Boston", "MA", 42.36, -71.06, &[]),
+    us("Somerville", "MA", 42.39, -71.10, &[]),
+    us("Amherst", "MA", 42.37, -72.52, &[]),
+    us("Burlington", "VT", 44.48, -73.21, &[]),
+    // Canada, with each city's province
+    ca("Toronto", "ON", 43.65, -79.38, &[]),
+    ca("Waterloo", "ON", 43.46, -80.52, &[]),
+    ca("Kitchener", "ON", 43.45, -80.49, &[]),
+    ca("Mississauga", "ON", 43.59, -79.64, &[]),
+    ca("Hamilton", "ON", 43.26, -79.87, &[]),
+    ca("Ottawa", "ON", 45.42, -75.70, &[]),
+    ca("Kingston", "ON", 44.23, -76.49, &[]),
+    ca("Peterborough", "ON", 44.30, -78.32, &[]),
+    ca("Montreal", "QC", 45.50, -73.57, &["montréal"]),
+    ca("Quebec City", "QC", 46.81, -71.21, &["quebec", "ville de quebec"]),
+    ca("Vancouver", "BC", 49.28, -123.12, &[]),
+    ca("Victoria", "BC", 48.43, -123.37, &[]),
+    ca("Calgary", "AB", 51.05, -114.07, &[]),
+    ca("Edmonton", "AB", 53.55, -113.49, &[]),
+    ca("Winnipeg", "MB", 49.90, -97.14, &[]),
+    ca("Saskatoon", "SK", 52.13, -106.67, &[]),
+    ca("Halifax", "NS", 44.65, -63.57, &[]),
+    ca("Fredericton", "NB", 45.96, -66.64, &[]),
+    // Mexico
     city("Mexico City", "Mexico", 19.43, -99.13, &["ciudad de mexico", "cdmx"]),
+    city("Guadalajara", "Mexico", 20.67, -103.35, &[]),
+    city("Monterrey", "Mexico", 25.69, -100.32, &[]),
     // Elsewhere
     city("Tel Aviv", "Israel", 32.09, 34.78, &[]),
     city("Dubai", "United Arab Emirates", 25.20, 55.27, &[]),
@@ -292,22 +429,54 @@ const COUNTRIES: &[(&str, &str, &[&str])] = &[
     ("TR", "Turkey", &["turkiye"]),
     ("UA", "Ukraine", &[]),
     ("GB", "United Kingdom", &["uk", "great britain", "england", "scotland", "wales", "northern ireland"]),
+    ("AD", "Andorra", &[]),
+    ("MC", "Monaco", &[]),
+    ("SM", "San Marino", &[]),
+    ("VA", "Vatican City", &["vatican", "holy see"]),
+    ("AL", "Albania", &["shqiperia"]),
+    ("BA", "Bosnia and Herzegovina", &["bosnia"]),
+    ("ME", "Montenegro", &[]),
+    ("MK", "North Macedonia", &["macedonia"]),
+    ("XK", "Kosovo", &[]),
+    ("BY", "Belarus", &[]),
     ("GE", "Georgia", &[]),
     ("AM", "Armenia", &[]),
-    ("US", "United States", &["usa", "united states of america"]),
+    ("US", "United States", &["usa", "us", "u s", "u s a", "united states of america"]),
     ("CA", "Canada", &[]),
     ("MX", "Mexico", &[]),
     ("BR", "Brazil", &["brasil"]),
+    ("AR", "Argentina", &[]),
+    ("CL", "Chile", &[]),
+    ("CO", "Colombia", &[]),
+    ("PE", "Peru", &[]),
     ("IL", "Israel", &[]),
     ("AE", "United Arab Emirates", &["uae"]),
+    ("SA", "Saudi Arabia", &[]),
+    ("QA", "Qatar", &[]),
+    ("EG", "Egypt", &[]),
+    ("MA", "Morocco", &[]),
+    ("TN", "Tunisia", &[]),
+    ("LY", "Libya", &[]),
+    ("PK", "Pakistan", &[]),
     ("SG", "Singapore", &[]),
     ("JP", "Japan", &[]),
-    ("KR", "South Korea", &["korea"]),
+    ("KR", "South Korea", &["korea", "republic of korea"]),
+    ("CN", "China", &[]),
+    ("HK", "Hong Kong", &[]),
+    ("TW", "Taiwan", &[]),
+    ("TH", "Thailand", &[]),
+    ("VN", "Vietnam", &["viet nam"]),
+    ("MY", "Malaysia", &[]),
+    ("ID", "Indonesia", &[]),
+    ("PH", "Philippines", &[]),
     ("IN", "India", &[]),
     ("AU", "Australia", &[]),
+    ("NZ", "New Zealand", &[]),
     ("ZA", "South Africa", &[]),
     ("KE", "Kenya", &[]),
     ("NG", "Nigeria", &[]),
+    ("GH", "Ghana", &[]),
+    ("RW", "Rwanda", &[]),
     ("FJ", "Fiji", &[]),
 ];
 
@@ -377,6 +546,147 @@ pub fn known_city(text: &str) -> Option<(&'static str, &'static str)> {
     find_city(text).map(|c| (c.name, c.country))
 }
 
+/// The usual name of a known city, when it is that city: in this country and,
+/// when both are known, in this US state or Canadian province. `London,
+/// Ontario` isn't London, and `Manhattan, Kansas` isn't New York.
+pub fn known_city_in(text: &str, country: &str, region: Option<&str>) -> Option<&'static str> {
+    let city = find_city(text)?;
+    let same_region = match (city.region, region) {
+        (Some(a), Some(b)) => a == b,
+        _ => true,
+    };
+    (city.country == country && same_region).then_some(city.name)
+}
+
+/// The US state or Canadian province a part of an address names, by its code
+/// (`CA`, `ON`, also with a postcode: `MA 02111`) or its name (`California`),
+/// as its country and code. Codes count only in capitals, so `in` and `or`
+/// stay words.
+pub fn subdivision(text: &str) -> Option<(&'static str, &'static str)> {
+    let without_postcode = strip_postcode(text);
+    let text = without_postcode.trim().trim_end_matches('.');
+    let tables = [(UNITED_STATES, US_STATES), (CANADA, CANADIAN_PROVINCES)];
+    if text.len() == 2 && text.bytes().all(|b| b.is_ascii_uppercase()) {
+        return tables.iter().find_map(|(country, table)| {
+            table
+                .iter()
+                .find(|(code, _)| *code == text)
+                .map(|(code, _)| (*country, *code))
+        });
+    }
+    let folded = fold(text);
+    tables.iter().find_map(|(country, table)| {
+        table
+            .iter()
+            .find(|(_, name)| fold(name) == folded)
+            .map(|(code, _)| (*country, *code))
+    })
+}
+
+/// Reads the last part of an address as a US state or Canadian province, unless
+/// it is the code or name of a country the part before it is a known city of:
+/// `Wilmington, DE` is in Delaware, but `Berlin, DE` is in Germany, and
+/// `Atlanta, Georgia` is in the state while `Tbilisi, Georgia` is the country.
+fn trailing_subdivision(parts: &[&str]) -> Option<&'static str> {
+    let (last, before) = parts.split_last()?;
+    let (country, _) = subdivision(last)?;
+    let other_country = country_name(&strip_postcode(last)).filter(|c| *c != country);
+    let city_there = before
+        .last()
+        .and_then(|b| known_city(&strip_postcode(b)))
+        .is_some_and(|(_, city_country)| Some(city_country) == other_country);
+    (!city_there).then_some(country)
+}
+
+/// The code of the US state a listing is in, from a state named in its
+/// location (`Richardson, Texas`, `Boston, MA 02111, USA`) or else from its
+/// known city. `None` when neither says.
+pub fn us_state(city: Option<&str>, location: Option<&str>) -> Option<&'static str> {
+    let from_location = location.and_then(|location| {
+        location
+            .split([',', '\n'])
+            .map(str::trim)
+            .rev()
+            .find_map(|part| match subdivision(part) {
+                Some((UNITED_STATES, code)) => Some(code),
+                _ => None,
+            })
+    });
+    from_location.or_else(|| {
+        city.and_then(find_city)
+            .filter(|c| c.country == UNITED_STATES)
+            .and_then(|c| c.region)
+    })
+}
+
+/// Known cities whose names are also common words or surnames, so a venue
+/// such as `Austin Hall` or `Hamilton Building` isn't read as the city.
+#[rustfmt::skip]
+const NOT_FOUND_IN_PROSE: &[&str] = &[
+    "nice", "split", "mons", "bergen", "essen", "lund", "cork", "hamilton", "kingston", "victoria",
+    "davis", "troy", "richardson", "durham", "charlotte", "madison", "columbus", "amherst",
+    "newark", "washington", "phoenix", "orlando", "austin", "houston", "dallas", "denver",
+    "boulder", "providence", "burlington", "waterloo", "bellevue", "stanford",
+];
+
+/// Places a venue as an organiser typed it, as Devpost gives it: `City, ST`,
+/// `City, State, Country`, a trailing country, a known city, or else a known
+/// city, state or country named inside it (`University of Texas at Austin`,
+/// `University of Calgary`). The city is only given when it is known or the
+/// venue is clearly an address; a bare building name gives neither.
+pub fn from_venue(venue: &str) -> (Option<String>, Option<String>) {
+    let parts: Vec<&str> = venue
+        .split(',')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
+    if parts.len() > 1 {
+        let (city, country) = from_address(venue);
+        if let Some(country) = country {
+            return (city, Some(country));
+        }
+    }
+    if let [only] = parts[..] {
+        if let Some((name, country)) = known_city(only) {
+            return (Some(name.to_owned()), Some(country.to_owned()));
+        }
+        if let Some((country, _)) = subdivision(only) {
+            return (None, Some(country.to_owned()));
+        }
+        if let Some(country) = country_name(only) {
+            return (None, Some(country.to_owned()));
+        }
+    }
+    named_inside(venue)
+}
+
+/// A known city, US state, Canadian province or country named as whole words
+/// inside a text, the longest name first.
+fn named_inside(text: &str) -> (Option<String>, Option<String>) {
+    let padded = format!(" {} ", fold(text));
+    let names = |name: &str| padded.contains(&format!(" {} ", fold(name)));
+    let city = CITIES
+        .iter()
+        .filter(|c| !NOT_FOUND_IN_PROSE.contains(&fold(c.name).as_str()))
+        .filter(|c| names(c.name) || c.aliases.iter().any(|a| a.contains(' ') && names(a)))
+        .max_by_key(|c| c.name.len());
+    if let Some(city) = city {
+        return (Some(city.name.to_owned()), Some(city.country.to_owned()));
+    }
+    let tables = [(UNITED_STATES, US_STATES), (CANADA, CANADIAN_PROVINCES)];
+    let region = tables
+        .iter()
+        .find(|(_, table)| table.iter().any(|(_, name)| names(name)));
+    if let Some((country, _)) = region {
+        return (None, Some((*country).to_owned()));
+    }
+    let country = COUNTRIES
+        .iter()
+        .find(|(_, name, _)| names(name))
+        .map(|(_, name, _)| (*name).to_owned());
+    (None, country)
+}
+
 /// The key two city names compare by: the usual name of a known city, or else
 /// the folded name, so `Gent` and `Ghent` match.
 pub fn city_key(text: &str) -> String {
@@ -418,14 +728,28 @@ fn distance_km(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
 /// `Lanolin Fabrik, Salzufer 15/16, 10587 Berlin, Germany`: the country is the
 /// last part when it names one, and the city the part before it, without its
 /// postcode. A known city fills in a missing country and gets its usual name.
+/// A US state or Canadian province after the city (`Stanford, CA`,
+/// `Toronto, Ontario`) gives the country too.
 pub fn from_address(address: &str) -> (Option<String>, Option<String>) {
     let mut parts: Vec<&str> = address
         .split([',', '\n'])
         .map(str::trim)
         .filter(|p| !p.is_empty())
         .collect();
-    let mut country = parts.last().and_then(|last| country_name(last));
+    let mut country = trailing_subdivision(&parts).or_else(|| {
+        let last = parts.last()?;
+        country_name(last)
+    });
     if country.is_some() {
+        parts.pop();
+    }
+    // `San Francisco, California, USA`: the state between the city and the country.
+    if country.is_some()
+        && parts.len() > 1
+        && let Some(last) = parts.last()
+        && subdivision(last).is_some()
+        && known_city(&strip_postcode(last)).is_none()
+    {
         parts.pop();
     }
     // A known city anywhere in the address wins, nearest the end first, since
@@ -530,6 +854,26 @@ mod tests {
             ),
             ("Amy Gutman Hall", Some("Amy Gutman Hall"), None),
             ("Fiji", None, Some("Fiji")),
+            // A US state or Canadian province after the city gives the country.
+            ("Stanford, CA", Some("Stanford"), Some("United States")),
+            ("Boston, MA 02111", Some("Boston"), Some("United States")),
+            (
+                "1 Lincoln St, Boston, MA 02111, USA",
+                Some("Boston"),
+                Some("United States"),
+            ),
+            (
+                "Smalltown, California, USA",
+                Some("Smalltown"),
+                Some("United States"),
+            ),
+            ("Toronto, Ontario", Some("Toronto"), Some("Canada")),
+            // Unless the city before it is in the country the code also names.
+            ("Toronto, CA", Some("Toronto"), Some("Canada")),
+            ("Berlin, DE", Some("Berlin"), Some("Germany")),
+            ("Wilmington, DE", Some("Wilmington"), Some("United States")),
+            ("Tbilisi, Georgia", Some("Tbilisi"), Some("Georgia")),
+            ("Atlanta, Georgia", Some("Atlanta"), Some("United States")),
         ];
         for (address, city, country) in cases {
             assert_eq!(
@@ -538,5 +882,97 @@ mod tests {
                 "{address}"
             );
         }
+    }
+
+    #[test]
+    fn devpost_venues_give_their_country() {
+        let cases = [
+            // `City, ST` and `City, State`.
+            ("Austin, TX", Some("Austin"), Some("United States")),
+            (
+                "New Orleans, LA",
+                Some("New Orleans"),
+                Some("United States"),
+            ),
+            ("Cambridge, MA", Some("Cambridge"), Some("United States")),
+            ("Ithaca, New York", Some("Ithaca"), Some("United States")),
+            ("Waterloo, ON", Some("Waterloo"), Some("Canada")),
+            // A trailing country.
+            (
+                "San Francisco, California, USA",
+                Some("San Francisco"),
+                Some("United States"),
+            ),
+            ("Vancouver, Canada", Some("Vancouver"), Some("Canada")),
+            ("Kupittaa Campus, Turku", Some("Turku"), Some("Finland")),
+            // A known city or state on its own, or named inside the venue.
+            ("Brighton", Some("Brighton"), Some("United Kingdom")),
+            ("Texas", None, Some("United States")),
+            ("Fiji", None, Some("Fiji")),
+            (
+                "Santa Clara Convention Center",
+                Some("Santa Clara"),
+                Some("United States"),
+            ),
+            ("University of Calgary", Some("Calgary"), Some("Canada")),
+            ("University of Texas at Austin", None, Some("United States")),
+            ("Hamilton, Ontario", Some("Hamilton"), Some("Canada")),
+            // A building's name says nothing, even when it holds a city's name
+            // that is also a common word or surname.
+            ("Amy Gutman Hall", None, None),
+            ("Irvington High School", None, None),
+            ("Austin Hall", None, None),
+            ("Hamilton Building", None, None),
+            ("Builders Club", None, None),
+        ];
+        for (venue, city, country) in cases {
+            assert_eq!(
+                from_venue(venue),
+                (city.map(str::to_owned), country.map(str::to_owned)),
+                "{venue}"
+            );
+        }
+    }
+
+    #[test]
+    fn us_states_come_from_the_location_or_the_city() {
+        assert_eq!(us_state(None, Some("Richardson, Texas")), Some("TX"));
+        assert_eq!(
+            us_state(Some("Boston"), Some("1 Lincoln St, Boston, MA 02111, USA")),
+            Some("MA")
+        );
+        assert_eq!(us_state(Some("San Francisco"), None), Some("CA"));
+        assert_eq!(
+            us_state(Some("Seattle"), Some("Seattle, United States")),
+            Some("WA")
+        );
+        assert_eq!(
+            us_state(Some("Saratoga"), Some("Saratoga, United States")),
+            None
+        );
+        assert_eq!(us_state(Some("Toronto"), Some("Toronto, Ontario")), None);
+        assert_eq!(us_state(Some("Paris"), None), None);
+    }
+
+    #[test]
+    fn subdivisions_read_codes_in_capitals_and_names() {
+        assert_eq!(subdivision("CA"), Some((UNITED_STATES, "CA")));
+        assert_eq!(subdivision("MA 02111"), Some((UNITED_STATES, "MA")));
+        assert_eq!(subdivision("north carolina"), Some((UNITED_STATES, "NC")));
+        assert_eq!(subdivision("British Columbia"), Some((CANADA, "BC")));
+        assert_eq!(subdivision("QC"), Some((CANADA, "QC")));
+        assert_eq!(subdivision("in"), None);
+        assert_eq!(subdivision("Bavaria"), None);
+    }
+
+    #[test]
+    fn a_known_city_must_be_in_the_given_country_and_state() {
+        assert_eq!(
+            known_city_in("NYC", UNITED_STATES, Some("NY")),
+            Some("New York")
+        );
+        assert_eq!(known_city_in("Manhattan", UNITED_STATES, Some("KS")), None);
+        assert_eq!(known_city_in("London", CANADA, Some("ON")), None);
+        assert_eq!(known_city_in("München", "Germany", None), Some("Munich"));
     }
 }

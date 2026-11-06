@@ -2,10 +2,15 @@
 //! listings into Candidates behind the same small interface.
 
 pub mod calendar;
+pub mod cassini;
+pub mod dev_events;
 pub mod devpost;
+pub mod ethglobal;
 pub mod hackathon_be;
 pub mod hackathonhub;
 pub mod luma;
+pub mod mlh;
+pub mod packs;
 pub mod places;
 pub mod polite;
 

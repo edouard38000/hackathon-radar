@@ -15,11 +15,8 @@ use hackathon_radar::process::SystemRunner;
 use hackathon_radar::profile::{AlertChannelSetting, Profile};
 use hackathon_radar::run::{self, RunDeps, RunOptions};
 use hackathon_radar::sources::Source;
-use hackathon_radar::sources::calendar::IcsCalendar;
-use hackathon_radar::sources::devpost::Devpost;
-use hackathon_radar::sources::hackathon_be::HackathonBe;
-use hackathon_radar::sources::hackathonhub::{self, HackathonHub};
-use hackathon_radar::sources::luma::{self, LumaCalendar};
+use hackathon_radar::sources::hackathonhub;
+use hackathon_radar::sources::packs;
 use hackathon_radar::sources::polite::PoliteHttp;
 use hackathon_radar::{paths, store::Store};
 
@@ -174,29 +171,22 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
     })
 }
 
-/// The Sources a Run reads, all fetching politely through one client so each
-/// site's robots.txt is read once per Run.
+/// The Sources a Run reads: the global ones, the Source packs (from Home and
+/// the Profile) and the person's own calendars, all fetching politely through
+/// one client so each site's robots.txt is read once per Run.
 fn sources(profile: &Profile, store: &Store) -> anyhow::Result<Vec<Box<dyn Source>>> {
-    let http = Rc::new(PoliteHttp::new(HttpClient::new()));
-    let mut sources: Vec<Box<dyn Source>> = vec![
-        Box::new(HackathonBe::new(http.clone())),
-        Box::new(HackathonHub::new(
-            http.clone(),
-            store.listings_from(hackathonhub::NAME)?,
-            profile.sources.hackathonhub_pages_per_run,
-            SystemClock.today(),
-        )),
-    ];
-    for url in luma::CALENDARS {
-        sources.push(Box::new(LumaCalendar::new(http.clone(), *url)));
-    }
-    sources.push(Box::new(Devpost::new(http)));
-    // The person's own calendars are fetched for them, like a calendar app would.
-    let own = Rc::new(PoliteHttp::new(HttpClient::new()).ignoring_robots());
-    for url in &profile.sources.ics {
-        sources.push(Box::new(IcsCalendar::new(own.clone(), url.clone())));
-    }
-    Ok(sources)
+    let plan = packs::plan(profile);
+    Ok(packs::build(
+        &plan,
+        packs::Fetching {
+            http: Rc::new(PoliteHttp::new(HttpClient::new())),
+            // The person's own calendars are fetched for them, like a calendar app would.
+            own_calendars: Rc::new(PoliteHttp::new(HttpClient::new()).ignoring_robots()),
+            today: SystemClock.today(),
+            hackathonhub_known: store.listings_from(hackathonhub::NAME)?,
+            hackathonhub_pages_per_run: profile.sources.hackathonhub_pages_per_run,
+        },
+    ))
 }
 
 /// The Alert channel the Profile names, or printing when it names none.

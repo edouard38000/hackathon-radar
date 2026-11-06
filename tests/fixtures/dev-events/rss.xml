@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+    <channel>
+        <title>Upcoming developer events</title>
+        <link>https://dev.events</link>
+        <description>Upcoming developer events</description>
+        <lastBuildDate>Fri, 06 Nov 2026 15:25:42 GMT</lastBuildDate>
+        <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
+        <generator>https://github.com/jpmonette/feed</generator>
+        <image>
+            <title>Upcoming developer events</title>
+            <url>https://dev.events/favicon.png</url>
+            <link>https://dev.events</link>
+        </image>
+        <copyright>All rights reserved 2020-2026, dev.events</copyright>
+        <!-- Trimmed from the live feed: a few items kept. -->
+        <item>
+            <title><![CDATA[Clean Architecture Masterclass]]></title>
+            <link>https://dev.events/conferences/clean-architecture-online-4-2023</link>
+            <guid>clean-architecture-online-4-2023</guid>
+            <pubDate>Mon, 06 Feb 2023 15:06:47 GMT</pubDate>
+            <description><![CDATA[Clean Architecture Masterclass is happening on December 10, 2026, Online. More information: https://dev.events/conferences/clean-architecture-online-4-2023]]></description>
+            <category>Java</category>
+            <category>masterclass</category>
+            <enclosure url="https://res.cloudinary.com/eduardsi/image/upload/w_1000,c_fit,co_white,l_text:Lato_80_bold:Clean%2520Architecture%2520Masterclass,g_north_west,x_100,y_100/w_1000,c_fit,co_white,l_text:Lato_40:Dec%252010-11%25202026,g_north_west,x_100,y_360/w_1000,c_fit,co_white,l_text:Lato_40_bold:Online,g_north_west,x_100,y_430/devevents-og_o00xcs.png" length="0" type="image/png"/>
+        </item>
+        <item>
+            <title><![CDATA[Write the Docs Portland 2027]]></title>
+            <link>https://dev.events/conferences/write-the-docs-portland-2027-uuhfdbhx</link>
+            <guid>write-the-docs-portland-2027-uuhfdbhx</guid>
+            <pubDate>Fri, 06 Nov 2026 13:52:58 GMT</pubDate>
+            <description><![CDATA[Write the Docs Portland 2027 is happening on May 2, 2027 in Portland, United States, North America. More information: https://dev.events/conferences/write-the-docs-portland-2027-uuhfdbhx]]></description>
+            <category>Tech</category>
+            <category>conference</category>
+            <enclosure url="https://res.cloudinary.com/eduardsi/image/upload/w_1000,c_fit,co_white,l_text:Lato_80_bold:Write%2520the%2520Docs%2520Portland%25202027,g_north_west,x_100,y_100/w_1000,c_fit,co_white,l_text:Lato_40:May%25202-4%25202027,g_north_west,x_100,y_360/w_1000,c_fit,co_white,l_text:Lato_40_bold:Portland%252C%2520United%2520States,g_north_west,x_100,y_430/devevents-og_o00xcs.png" length="0" type="image/png"/>
+        </item>
+        <item>
+            <title><![CDATA[Aevum Builder Challenge #1]]></title>
+            <link>https://dev.events/conferences/aevum-builder-challenge-1-xbtx05-m</link>
+            <guid>aevum-builder-challenge-1-xbtx05-m</guid>
+            <pubDate>Thu, 05 Nov 2026 11:50:22 GMT</pubDate>
+            <description><![CDATA[Aevum Builder Challenge #1 is happening on November 16, 2026, Online. More information: https://dev.events/conferences/aevum-builder-challenge-1-xbtx05-m]]></description>
+            <category>Tech</category>
+            <category>hackathon</category>
+            <enclosure url="https://res.cloudinary.com/eduardsi/image/upload/w_1000,c_fit,co_white,l_text:Lato_80_bold:Aevum%2520Builder%2520Challenge%2520%25231,g_north_west,x_100,y_100/w_1000,c_fit,co_white,l_text:Lato_40:Nov%252016%2520-%2520Dec%252011%25202026,g_north_west,x_100,y_360/w_1000,c_fit,co_white,l_text:Lato_40_bold:Online,g_north_west,x_100,y_430/devevents-og_o00xcs.png" length="0" type="image/png"/>
+        </item>
+        <item>
+            <title><![CDATA[Do Not Disturb: Phone Use Hackathon]]></title>
+            <link>https://dev.events/conferences/do-not-disturb-phone-use-hackathon-2us3bhwi</link>
+            <guid>do-not-disturb-phone-use-hackathon-2us3bhwi</guid>
+            <pubDate>Thu, 05 Nov 2026 11:46:15 GMT</pubDate>
+            <description><![CDATA[Do Not Disturb: Phone Use Hackathon is happening on November 12, 2026 in San Francisco, United States, North America. More information: https://dev.events/conferences/do-not-disturb-phone-use-hackathon-2us3bhwi]]></description>
+            <category>Artificial Intelligence (AI)</category>
+            <category>hackathon</category>
+            <enclosure url="https://res.cloudinary.com/eduardsi/image/upload/w_1000,c_fit,co_white,l_text:Lato_80_bold:Do%2520Not%2520Disturb%253A%2520Phone%2520Use%2520Hackathon,g_north_west,x_100,y_100/w_1000,c_fit,co_white,l_text:Lato_40:Nov%252012%25202026,g_north_west,x_100,y_360/w_1000,c_fit,co_white,l_text:Lato_40_bold:San%2520Francisco%252C%2520United%2520States,g_north_west,x_100,y_430/devevents-og_o00xcs.png" length="0" type="image/png"/>
+        </item>
+        <item>
+            <title><![CDATA[SCALEFORGE NATIONAL AI HACKATHON]]></title>
+            <link>https://dev.events/conferences/scaleforge-national-ai-hackathon-u8u3bcg1</link>
+            <guid>scaleforge-national-ai-hackathon-u8u3bcg1</guid>
+            <pubDate>Sun, 01 Nov 2026 11:05:26 GMT</pubDate>
+            <description><![CDATA[SCALEFORGE NATIONAL AI HACKATHON is happening on November 22, 2026 in Islamabad, Pakistan, Asia. More information: https://dev.events/conferences/scaleforge-national-ai-hackathon-u8u3bcg1]]></description>
+            <category>Artificial Intelligence (AI)</category>
+            <category>hackathon</category>
+            <enclosure url="https://res.cloudinary.com/eduardsi/image/upload/w_1000,c_fit,co_white,l_text:Lato_80_bold:SCALEFORGE%2520NATIONAL%2520AI%2520HACKATHON,g_north_west,x_100,y_100/w_1000,c_fit,co_white,l_text:Lato_40:Nov%252022%25202026,g_north_west,x_100,y_360/w_1000,c_fit,co_white,l_text:Lato_40_bold:Islamabad%252C%2520Pakistan,g_north_west,x_100,y_430/devevents-og_o00xcs.png" length="0" type="image/png"/>
+        </item>
+        <item>
+            <title><![CDATA[Q2 DataRide 2027]]></title>
+            <link>https://dev.events/conferences/q2-data-ride-2027-fslcvit8</link>
+            <guid>q2-data-ride-2027-fslcvit8</guid>
+            <pubDate>Sun, 01 Nov 2026 10:55:53 GMT</pubDate>
+            <description><![CDATA[Q2 DataRide 2027 is happening on April 16, 2027 in Mannheim, Germany, Europe. More information: https://dev.events/conferences/q2-data-ride-2027-fslcvit8]]></description>
+            <category>Data Science</category>
+            <category>hackathon</category>
+            <enclosure url="https://res.cloudinary.com/eduardsi/image/upload/w_1000,c_fit,co_white,l_text:Lato_80_bold:Q2%2520DataRide%25202027,g_north_west,x_100,y_100/w_1000,c_fit,co_white,l_text:Lato_40:Apr%252016-17%25202027,g_north_west,x_100,y_360/w_1000,c_fit,co_white,l_text:Lato_40_bold:Mannheim%252C%2520Germany,g_north_west,x_100,y_430/devevents-og_o00xcs.png" length="0" type="image/png"/>
+        </item>
+        <item>
+            <title><![CDATA[AI for Social Good Hackathon at West Valley College]]></title>
+            <link>https://dev.events/conferences/ai-for-social-good-hackathon-at-west-valley-college-esknvlbo</link>
+            <guid>ai-for-social-good-hackathon-at-west-valley-college-esknvlbo</guid>
+            <pubDate>Fri, 30 Oct 2026 08:31:05 GMT</pubDate>
+            <description><![CDATA[AI for Social Good Hackathon at West Valley College is happening on November 6, 2026 in Saratoga, United States, North America. More information: https://dev.events/conferences/ai-for-social-good-hackathon-at-west-valley-college-esknvlbo]]></description>
+            <category>Artificial Intelligence (AI)</category>
+            <category>hackathon</category>
+            <enclosure url="https://res.cloudinary.com/eduardsi/image/upload/w_1000,c_fit,co_white,l_text:Lato_80_bold:AI%2520for%2520Social%2520Good%2520Hackathon%2520at%2520West%2520Valley%2520College,g_north_west,x_100,y_100/w_1000,c_fit,co_white,l_text:Lato_40:Nov%25206%25202026,g_north_west,x_100,y_360/w_1000,c_fit,co_white,l_text:Lato_40_bold:Saratoga%252C%2520United%2520States,g_north_west,x_100,y_430/devevents-og_o00xcs.png" length="0" type="image/png"/>
+        </item>
+    </channel>
+</rss>

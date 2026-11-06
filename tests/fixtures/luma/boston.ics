@@ -1,0 +1,51 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Luma//What‘s Happening in Boston//EN
+X-WR-CALNAME:What‘s Happening in Boston
+X-WR-CALDESC:Luma Calendar
+REFRESH-INTERVAL;VALUE=DURATION:PT12H
+X-PUBLISHED-TTL:PT12H
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+DTSTART:20261107T173000Z
+DTEND:20261107T210000Z
+DTSTAMP:20261106T152922Z
+ORGANIZER;CN="Swissnex in Boston and New York":MAILTO:calendar-invite@lu.ma
+UID:evt-ksL2ptwnOHGtUJ5@events.lu.ma
+SUMMARY:Whose Landscape: The Alps Between Nation and Planet
+DESCRIPTION:Get up-to-date information at: https://luma.com/48t4n4em\n\nAd
+ dress:\nSwissnex\nCambridge, MA\nUnited States\n\nWhose Landscape: The Alp
+ s Between Nation and Planet\nJoin us at Swissnex for a conversation on own
+ ership, representation, and the image of the Alps, followed by a guided to
+ ur of On Location: Drawing the Outdoors at the Harvard Art Museums.\nPrese
+ nted in conjunction with the Harvard Art Museums exhibition On Location: D
+ rawing the Outdoors (September 18, 2026–January 17, 2027), this event ex
+ plores how the image and meaning of the Alps have been shaped across cultu
+ res, institutions, and time.\nThe image of the Swiss Alps has never been s
+ haped by Switzerland alone. Foreign Romantics—including…\n\nHosted by 
+ Swissnex in Boston and New York
+LOCATION:Swissnex, 420 Broadway, Cambridge, MA 02138, USA
+GEO:42.3725646;-71.1096724
+SEQUENCE:216142162
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261110T200000Z
+DTEND:20261110T230000Z
+DTSTAMP:20261106T152922Z
+ORGANIZER;CN="Owen Hacker":MAILTO:calendar-invite@lu.ma
+UID:evt-AT4WOtHIpBl2Kfg@events.lu.ma
+SUMMARY:Lovable: Hackathon x Startup Trek
+DESCRIPTION:Get up-to-date information at: https://luma.com/ov7zl4rd\n\nAd
+ dress:\n1 Lincoln St\nBoston, MA\nUnited States\n\nTour Lovable HQ. Get fr
+ ee credits. Hack with the team.Step inside Lovable’s office, meet the op
+ erators building the future of AI-powered product creation, grab exclusive
+  credits, and team up on-site to ship something real together.\n\nHosted b
+ y Owen Hacker, Ryan Durkin & Ashley Olafsen
+LOCATION:1 Lincoln St, Boston, MA 02111, USA
+GEO:42.3522258;-71.0579393
+SEQUENCE:216142162
+STATUS:TENTATIVE
+END:VEVENT
+END:VCALENDAR

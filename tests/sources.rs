@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use hackathon_radar::candidate::Candidate;
+use hackathon_radar::candidate::{Candidate, Dates};
 use hackathon_radar::http::HttpGet;
 use hackathon_radar::sources::Source;
 use hackathon_radar::sources::calendar::{self, IcsCalendar};
@@ -274,13 +274,13 @@ fn luma_reads_an_address_when_the_calendar_gives_one() {
 #[test]
 fn each_luma_calendar_is_fetched_from_its_url() {
     let http = FixtureHttp::new(&[
-        (luma::CALENDARS[0], fixture("luma/tech-europe.ics")),
+        (luma::EUROPE_CALENDARS[0], fixture("luma/tech-europe.ics")),
         (
-            luma::CALENDARS[1],
+            luma::EUROPE_CALENDARS[1],
             fixture("luma/european-defense-tech-hub.ics"),
         ),
     ]);
-    let defense = LumaCalendar::new(&http, luma::CALENDARS[1]);
+    let defense = LumaCalendar::new(&http, luma::EUROPE_CALENDARS[1]);
 
     let names: Vec<String> = defense
         .fetch()
@@ -297,7 +297,7 @@ fn each_luma_calendar_is_fetched_from_its_url() {
             "{Tech: Europe} Agentic AI Hack"
         ]
     );
-    assert_eq!(*http.requested.borrow(), [luma::CALENDARS[1]]);
+    assert_eq!(*http.requested.borrow(), [luma::EUROPE_CALENDARS[1]]);
 }
 
 #[test]
@@ -350,15 +350,17 @@ fn devpost_reads_every_page_and_keeps_in_person_events() {
                 "hacksussex-gamejam-2026",
             ),
             // Online-only "Teens Hack Houston" is left out.
+            // The venue names a known city, so the event is placed in the United States.
             devpost(
                 "30463",
                 "DeveloperWeek 2027 Hackathon",
                 (date(2027, 1, 25), date(2027, 2, 11)),
-                None,
+                Some("Santa Clara"),
                 "Santa Clara Convention Center + Online",
-                None,
+                Some("United States"),
                 "developerweek-2027-hackathon",
             ),
+            // A bare building name says nothing about where it is.
             devpost(
                 "31980",
                 "Mini VikingHacks",
@@ -369,6 +371,12 @@ fn devpost_reads_every_page_and_keeps_in_person_events() {
                 "mini-vikinghacks",
             ),
         ]
+    );
+    // Devpost's dates are submission periods, not the event's days.
+    assert!(
+        candidates
+            .iter()
+            .all(|c| c.dates() == Dates::SubmissionPeriod)
     );
     assert_eq!(source.name(), "devpost");
     // Page 2 brings the count to the total, so there is no page 3.
@@ -530,7 +538,7 @@ fn the_real_robots_files_allow_the_paths_sources_fetch() {
         (devpost::API_URL.to_owned(), fixture("devpost/page-1.json")),
         (devpost::page_url(2), fixture("devpost/page-2.json")),
         (
-            luma::CALENDARS[0].to_owned(),
+            luma::EUROPE_CALENDARS[0].to_owned(),
             fixture("luma/tech-europe.ics"),
         ),
     ];
@@ -540,7 +548,7 @@ fn the_real_robots_files_allow_the_paths_sources_fetch() {
 
     assert_eq!(Devpost::new(polite.clone()).fetch().unwrap().len(), 4);
     assert_eq!(
-        LumaCalendar::new(polite.clone(), luma::CALENDARS[0])
+        LumaCalendar::new(polite.clone(), luma::EUROPE_CALENDARS[0])
             .fetch()
             .unwrap()
             .len(),

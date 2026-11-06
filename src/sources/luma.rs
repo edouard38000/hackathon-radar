@@ -12,10 +12,19 @@ use crate::sources::{Source, calendar, places};
 
 pub const NAME: &str = "luma";
 
-/// The Luma calendars read by default: {Tech: Europe} and the European Defense Tech Hub.
-pub const CALENDARS: &[&str] = &[
+/// The Europe Source pack's Luma calendars: {Tech: Europe} and the European Defense Tech Hub.
+pub const EUROPE_CALENDARS: &[&str] = &[
     "https://api.lu.ma/ics/get?entity=calendar&id=cal-qyEpCltsspbMoJR",
     "https://api.lu.ma/ics/get?entity=calendar&id=cal-QCQbg4FodJDriFO",
+];
+
+/// The North America Source pack's Luma calendars: Luma's city pages for San
+/// Francisco (luma.com/sf), New York (luma.com/nyc) and Boston
+/// (luma.com/boston), each published as an ICS feed of its upcoming events.
+pub const NORTH_AMERICA_CALENDARS: &[&str] = &[
+    "https://api.lu.ma/ics/get?entity=discover&id=discplace-BDj7GNbGlsF7Cka",
+    "https://api.lu.ma/ics/get?entity=discover&id=discplace-Izx1rQVSh8njYpP",
+    "https://api.lu.ma/ics/get?entity=discover&id=discplace-VWeZ1zUvnawYHMj",
 ];
 
 /// Words in an event's name that mark it as a possible Hackathon (folded, see [`places::fold`]).
