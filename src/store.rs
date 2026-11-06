@@ -11,10 +11,12 @@ use crate::candidate::Candidate;
 
 mod deadlines;
 mod fares;
+mod imported;
 mod runs;
 mod travel;
 
 pub use deadlines::{JudgementChange, NewlyFunded};
+pub use imported::{ImportedFare, ImportedListing};
 pub use runs::{FailedStreak, RunCounts, RunRecord};
 
 /// Applied in order; `PRAGMA user_version` records how many have run.
