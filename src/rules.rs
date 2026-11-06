@@ -7,6 +7,10 @@
 //! Fares. So the Train limit labels trips but doesn't yet filter any out, and
 //! Countries is still the only place-based filter.
 //!
+//! Countries can name regions ([`crate::countries`]): `Schengen` passes its
+//! member countries, and `US West Coast` the Hackathons in California, Oregon
+//! and Washington, by the US state their location or city gives.
+//!
 //! The Travel-funded rule (ticket 09): with `travel.travel_funded_anywhere`, a
 //! Hackathon outside Countries passes the data-only rules too, because only the
 //! Agent can tell whether it is Travel-funded; it Fits only once judged so.
@@ -16,6 +20,7 @@ use chrono::NaiveDate;
 use crate::agent::{Judgement, TravelFunded};
 use crate::candidate::Candidate;
 use crate::profile::Profile;
+use crate::sources::places;
 
 /// Keeps the Candidates that pass every data-only rule: not over yet, and in
 /// one of the Profile's Countries, or anywhere when the Travel-funded rule
@@ -33,12 +38,14 @@ fn passes(candidate: &Candidate, profile: &Profile, today: NaiveDate) -> bool {
         && (in_countries(candidate, profile) || profile.travel.travel_funded_anywhere)
 }
 
-/// Whether the Candidate is in one of the Profile's Countries.
+/// Whether the Candidate is in one of the Profile's Countries, with regions
+/// expanded. A US Candidate whose state is unknown is only in Countries when
+/// they include the whole United States, not just some states.
 pub fn in_countries(candidate: &Candidate, profile: &Profile) -> bool {
-    candidate
-        .country
-        .as_deref()
-        .is_some_and(|country| profile.includes_country(country))
+    candidate.country.as_deref().is_some_and(|country| {
+        let state = places::us_state(candidate.city.as_deref(), candidate.location.as_deref());
+        profile.countries().includes(country, state)
+    })
 }
 
 /// Whether a judged Hackathon Fits: it passes the data-only rules, the Agent

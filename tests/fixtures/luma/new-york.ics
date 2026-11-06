@@ -1,0 +1,50 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Luma//What‘s Happening in New York//EN
+X-WR-CALNAME:What‘s Happening in New York
+X-WR-CALDESC:Luma Calendar
+REFRESH-INTERVAL;VALUE=DURATION:PT12H
+X-PUBLISHED-TTL:PT12H
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+DTSTART:20261106T230000Z
+DTEND:20261107T010000Z
+DTSTAMP:20261106T152920Z
+ORGANIZER;CN="Leroy Street Studio":MAILTO:calendar-invite@lu.ma
+UID:evt-qvKmuGn1iHTvHUr@events.lu.ma
+SUMMARY:Archadia, Opening Night
+DESCRIPTION:Get up-to-date information at: https://luma.com/fyma6djb\n\nAd
+ dress:\n65 Allen St\nNew York, NY\nUnited States\n\nCelebrate the opening 
+ of Archadia at Allen Street Gallery. Wood, wool, earth, and fiber take new
+  forms in furniture, lighting, and textiles that bring together rustic mat
+ eriality and contemporary making. Join us for drinks and an evening among 
+ the work.\n\nHosted by Leroy Street Studio
+LOCATION:65 Allen St, New York, NY 10002, USA
+GEO:40.7171807;-73.99171179999999
+SEQUENCE:216142160
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261106T230000Z
+DTEND:20261107T030000Z
+DTSTAMP:20261106T152920Z
+ORGANIZER;CN="JT Liss":MAILTO:calendar-invite@lu.ma
+UID:evt-Ucu57UAasZzl5T0@events.lu.ma
+SUMMARY:Cycol Gallery Presents: Of Voices Exhibition and Cycol 2.0 Reveal
+DESCRIPTION:Get up-to-date information at: https://luma.com/535yrjk6\n\nAd
+ dress:\nCycol Gallery\nNew York, NY\nUnited States\n\nOf Voices will prese
+ nt the work of three exceptional artists, spanning both the traditional an
+ d digital art worlds. Danielle Mastrion, Diane Lindo and Rebecca Rose will
+  bring their distinct styles and voice to our next exhibition at 91 Allen.
+ \nTo pair with this, Cycol is also incredibly excited to announce Cycol 2.
+ 0 will officially be revealed to the public on this evening, launching the
+  beginning of something truly unique and special as we aim to be one of th
+ e most recognized cultural hubs in NYC.\nPowered by Solana and BONK\n\nHos
+ ted by JT Liss & Lampwrecked
+LOCATION:Cycol Gallery, 91 Allen St, New York, NY 10002, USA
+GEO:40.7185968;-73.9910376
+SEQUENCE:216142160
+STATUS:TENTATIVE
+END:VEVENT
+END:VCALENDAR

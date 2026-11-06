@@ -2,7 +2,7 @@
 
 A self-hosted hackathon tracker. An AI agent running on your own machine finds hackathons that fit where you live and what you care about, tracks application deadlines, and texts you when something new or travel-funded appears.
 
-> **Status:** early development. Runs read hackathon.be, hackathonhub.eu, Luma, Devpost and your own ICS calendars, merge Duplicate listings, and send Alerts by iMessage through Photon, or through ntfy.
+> **Status:** early development. Runs read the global Sources (Devpost, MLH, ETHGlobal, the CASSINI Hackathons, dev.events), the Source pack for your Home (Europe or North America) and your own ICS calendars, merge Duplicate listings, and send Alerts by iMessage through Photon, or through ntfy.
 
 ## Principles
 
@@ -13,7 +13,7 @@ A self-hosted hackathon tracker. An AI agent running on your own machine finds h
 
 ## Try it
 
-`hackathon-radar run --dry-run` reads the Sources ([hackathon.be](https://hackathon.be), [hackathonhub.eu](https://hackathonhub.eu), two Luma calendars, [Devpost](https://devpost.com) and any ICS calendars you add under `[sources]` in your Profile), merges listings of the same Hackathon from different Sources, keeps the listings that haven't ended and are in your Profile's Countries, asks your Agent (Claude Code, Codex or another coding agent) which of them are real Hackathons you're eligible for and which are Travel-funded, stores the results in a local SQLite database, and prints the Alert it would send. A dry run sends nothing and marks nothing as Announced.
+`hackathon-radar run --dry-run` reads the Sources (the global ones, [Devpost](https://devpost.com), [MLH](https://www.mlh.com), [ETHGlobal](https://ethglobal.com/events), the [CASSINI Hackathons](https://www.cassini.eu/hackathons/) and [dev.events](https://dev.events); the Source pack Home's country picks, Europe with [hackathon.be](https://hackathon.be), [hackathonhub.eu](https://hackathonhub.eu) and two Luma calendars, or North America with Luma's San Francisco, New York and Boston calendars; any packs you add; and any ICS calendars you add under `[sources]` in your Profile), merges listings of the same Hackathon from different Sources, keeps the listings that haven't ended and are in your Profile's Countries (which can name regions such as `"Schengen"`, `"European Union"`, `"North America"` or `"US West Coast"`), asks your Agent (Claude Code, Codex or another coding agent) which of them are real Hackathons you're eligible for and which are Travel-funded, stores the results in a local SQLite database, and prints the Alert it would send. A dry run sends nothing and marks nothing as Announced.
 
 ```sh
 cargo run -- run --dry-run --profile examples/profile.toml
@@ -21,7 +21,7 @@ cargo run -- run --dry-run --profile examples/profile.toml
 
 Without `--dry-run`, the Alert goes to the Alert channel in your Profile: an iMessage from your own [Photon](#photon-imessage-alerts) line, or a push through [ntfy](https://ntfy.sh). For ntfy, which needs no account, install the ntfy app, subscribe to a hard-to-guess topic, and uncomment the `[alert_channel]` section of the example Profile with that topic. Your first Alert is a Welcome Alert listing up to 6 Hackathons that already Fit. Later Runs only tell you about Hackathons that newly Fit, each one once, about known ones that newly became Travel-funded, and give a Deadline reminder 3 days before an open Hackathon that Fits closes applications; Travel-funded ones come first, at most 6 per Alert (the rest come in the next one), and nothing is sent when nothing is new. Each entry shows the dates and city, the trip or travel funding, the application status and deadline, and the link. Each Run also has your Agent recheck the deadline, status and travel funding of a few known Hackathons (see `[deadlines]` in the example Profile). If your ntfy server needs an access token, set it in `HACKATHON_RADAR_NTFY_TOKEN`; it never goes in the Profile. With no Alert channel set, the Alert is printed instead and nothing is marked as Announced.
 
-Your Profile is a small TOML file with your Home, Countries and Alert channel; see [`examples/profile.toml`](examples/profile.toml). By default it is read from `~/.config/hackathon-radar/profile.toml` and the database lives at `~/.local/share/hackathon-radar/hackathon-radar.sqlite` (both honour `XDG_CONFIG_HOME` and `XDG_DATA_HOME`). Pass `--profile` and `--db` to use other paths.
+Your Profile is a small TOML file with your Home, Countries, currency and Alert channel; see [`examples/profile.toml`](examples/profile.toml). By default it is read from `~/.config/hackathon-radar/profile.toml` and the database lives at `~/.local/share/hackathon-radar/hackathon-radar.sqlite` (both honour `XDG_CONFIG_HOME` and `XDG_DATA_HOME`). Pass `--profile` and `--db` to use other paths.
 
 ### Photon (iMessage) Alerts
 

@@ -1,0 +1,103 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Luma//What‘s Happening in San Francisco//EN
+X-WR-CALNAME:What‘s Happening in San Francisco
+X-WR-CALDESC:Luma Calendar
+REFRESH-INTERVAL;VALUE=DURATION:PT12H
+X-PUBLISHED-TTL:PT12H
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+DTSTART:20261106T173000Z
+DTEND:20261106T190000Z
+DTSTAMP:20261106T152902Z
+ORGANIZER;CN="Ming Yao":MAILTO:calendar-invite@lu.ma
+UID:evt-aG22RnniAGsEDru@events.lu.ma
+SUMMARY:Biotech Open Pitch Session
+DESCRIPTION:Get up-to-date information at: https://luma.com/yklgathz\n\nAd
+ dress:\nFrances C. Arrillaga Alumni Center\nStanford, CA\nUnited States\n
+ \nCome hear what’s next in biotech. At this open pitch session, Stanford
+  student and alumni founders will share early-stage biotech and science-dr
+ iven ideas with each other, invited investors, and the broader community. 
+ Designed as a collaborative forum, the session offers founders the chance 
+ to test-drive their pitches, get feedback from the audience, and recruit p
+ otential teammates or advisors. Whether you’re a founder, scientist, or 
+ investor, it’s an opportunity to engage directly with bold ideas at thei
+ r earliest stages.\nFor those interested in pitching, complete this form\n
+ For inquiries,…\n\nHosted by Ming Yao & Jenny Ji
+LOCATION:Frances C. Arrillaga Alumni Center, 326 Galvez St, Stanford, CA 9
+ 4305, USA
+GEO:37.430724999999995;-122.16480000000001
+SEQUENCE:216142142
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261107T010000Z
+DTEND:20261107T040000Z
+DTSTAMP:20261106T152902Z
+ORGANIZER;CN="Qualcomm":MAILTO:calendar-invite@lu.ma
+UID:evt-40Opb4EW50hxWGV@events.lu.ma
+SUMMARY:Qualcomm UNO Q Hack Night #3
+DESCRIPTION:Get up-to-date information at: https://luma.com/unu-q-3-nov-6-
+ 26\n\nAddress:\nQualcomm\nBuilding B Cafeteria\nSanta Clara, CA\nUnited St
+ ates\n\nBuild Local AI on Arduino UNO Q with Qualcomm\nJoin Qualcomm and H
+ ackerSquad for an evening of hands-on building with Arduino UNO Q, a platf
+ orm that combines real-time microcontroller control, Linux-class computing
+ , and edge AI capabilities in a single board. Whether you're continuing fr
+ om the last workshop or starting fresh, this session is focused on taking 
+ the first steps into the world of AI on edge.\nWe'll go beyond introductor
+ y examples and explore richer applications of on-device intelligence with 
+ multimodal sensing, autonomous decision-making, and connected physical exp
+ eriences that…\n\nHosted by Qualcomm, HackerSquad & Aaishika
+LOCATION:Qualcomm, 3165 Kifer Rd, Santa Clara, CA 95051, USA
+GEO:37.3745242;-121.98482680000001
+SEQUENCE:216142142
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261114T170000Z
+DTEND:20261115T050000Z
+DTSTAMP:20261106T152902Z
+ORGANIZER;CN="Heba Alazzeh":MAILTO:calendar-invite@lu.ma
+UID:evt-EQs99uvoseaCrxf@events.lu.ma
+SUMMARY:DNAForge & MTC Berkeley: AI × Biology Hackathon
+DESCRIPTION:Get up-to-date information at: https://luma.com/xdzhu4tn\n\nAd
+ dress:\nCheck event page for more details.\n\nSolve a real biology problem
+  using the latest advances in AI!\nOn November 14th in Berkeley, we’re b
+ ringing biologists, AI engineers and software builders together for DNAFor
+ ge’s AI × Biology Hackathon, co-hosted with MTC Berkeley.\nSaturday, No
+ vember 14th, 2026\n9:00 AM–9:00 PM Pacific · Berkeley, CA\nAbout 100 pa
+ rticipants\nApplications take under 5 minutes. Apply by October 25th for p
+ riority consideration.\nWhat you’ll get\nTackle challenges in therapeuti
+ cs, biosecurity or agricultural resilience with compute and scientific too
+ ls supported by our sponsors.\nMeet companies that are hiring and get…\n
+ \nHosted by Heba Alazzeh & 7 others
+LOCATION:https://luma.com/event/evt-EQs99uvoseaCrxf
+GEO:37.86210035241771;-122.2640920714793
+SEQUENCE:216142142
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261114T180000Z
+DTEND:20261115T030000Z
+DTSTAMP:20261106T152902Z
+ORGANIZER;CN="Women in AI Club":MAILTO:calendar-invite@lu.ma
+UID:evt-WmcFSQ1lBmjJiST@events.lu.ma
+SUMMARY:She Builds: A Women in AI × Lovable Hackathon
+DESCRIPTION:Get up-to-date information at: https://luma.com/lw202zjx\n\nAd
+ dress:\nCheck event page for more details.\n\nBuild a real app in a day  
+ 🚀\nJoin Women in AI for a full-day hackathon in partnership with Lovabl
+ e where you'll build and ship a real, working app.\nWhether you're an engi
+ neer, PM, designer, founder, student, or simply AI-curious, you'll leave h
+ aving published something real. Just bring your laptop and an idea. All le
+ vels welcomed.\nWhat you'll get:\n🎁 100 free Lovable credits to build w
+ ith\n🛠️ A hands-on building session + live mentorship, all day\n☕ G
+ reat food, coffee, and good energy\n🤝 A room full of women and allies b
+ uilding in AI\n🏆 Demos, community voting, and prizes (to be…\n\nHoste
+ d by Women in AI Club & 4 others
+LOCATION:https://luma.com/event/evt-WmcFSQ1lBmjJiST
+GEO:37.786341571473166;-122.3932589631275
+SEQUENCE:216142142
+STATUS:TENTATIVE
+END:VEVENT
+END:VCALENDAR

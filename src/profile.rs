@@ -8,6 +8,10 @@ use chrono::{NaiveTime, Weekday};
 use serde::Deserialize;
 
 use crate::agent::command::CommandTemplate;
+use crate::countries::Countries;
+use crate::money::Currency;
+use crate::sources::packs::Pack;
+use crate::sources::places;
 
 mod deadlines;
 mod travel;
@@ -21,8 +25,11 @@ pub use travel::{DEFAULT_TRAIN_LIMIT_MINUTES, FlightOverride, TravelOverride, Tr
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Profile {
     pub home: Home,
-    /// Country names, such as `Belgium` or `France`.
+    /// Country and region names, such as `Belgium`, `Schengen` or `US West
+    /// Coast`, as written; [`Profile::countries`] expands the regions.
     pub countries: Vec<String>,
+    /// The currency the person counts money in (the Flight budget and Fares).
+    pub currency: Currency,
     /// Where Alerts go. Without one, Alerts are printed instead of sent.
     pub alert_channel: Option<AlertChannelSetting>,
     /// When scheduled Runs happen.
@@ -45,6 +52,19 @@ pub struct Home {
     pub country: Option<String>,
     /// IATA codes of the airports the person flies out of, upper-cased.
     pub airports: Vec<String>,
+}
+
+impl Home {
+    /// The English name of Home's country: the one the Profile gives, or else
+    /// the country of Home's city when it is a known city.
+    pub fn country_name(&self) -> Option<String> {
+        match &self.country {
+            Some(country) => {
+                Some(places::country_name(country).map_or_else(|| country.clone(), str::to_owned))
+            }
+            None => places::known_city(&self.city).map(|(_, country)| country.to_owned()),
+        }
+    }
 }
 
 /// The Alert channel a Profile names, with its settings. Secrets never live here.
@@ -104,10 +124,13 @@ pub struct AgentSettings {
     pub travel_max_turns: u32,
 }
 
-/// The person's own Sources, and limits on the built-in ones.
+/// The person's own Sources, extra Source packs, and limits on the built-in ones.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SourceSettings {
+    /// Source packs to read on top of the one Home's country picks, such as `north-america`.
+    #[serde(default)]
+    pub packs: Vec<Pack>,
     /// ICS calendar feeds the person adds, such as a community's calendar.
     #[serde(default)]
     pub ics: Vec<String>,
@@ -123,6 +146,7 @@ fn default_hackathonhub_pages_per_run() -> usize {
 impl Default for SourceSettings {
     fn default() -> Self {
         Self {
+            packs: Vec::new(),
             ics: Vec::new(),
             hackathonhub_pages_per_run: default_hackathonhub_pages_per_run(),
         }
@@ -213,6 +237,7 @@ impl fmt::Display for Problems<'_> {
 struct ProfileFile {
     home: HomeFile,
     countries: Vec<String>,
+    currency: Option<String>,
     alert_channel: Option<AlertChannelFile>,
     #[serde(default)]
     schedule: ScheduleFile,
@@ -301,6 +326,11 @@ impl Profile {
                 ));
             }
         }
+        let home = Home {
+            city,
+            country: home_country,
+            airports,
+        };
 
         let countries: Vec<String> = file.countries.iter().map(|c| c.trim().to_owned()).collect();
         if countries.is_empty() {
@@ -311,6 +341,16 @@ impl Profile {
         if countries.iter().any(String::is_empty) {
             problems.push("countries has an empty entry".to_owned());
         }
+
+        let currency = match file.currency.as_deref() {
+            Some(code) => Currency::parse(code).unwrap_or_else(|| {
+                problems.push(format!(
+                    "currency: {code:?} is not a currency code; use a three-letter ISO 4217 code, such as \"EUR\" or \"USD\""
+                ));
+                Currency::default()
+            }),
+            None => Currency::of_country(home.country_name().as_deref()),
+        };
 
         let alert_channel = file
             .alert_channel
@@ -375,12 +415,9 @@ impl Profile {
             });
         }
         Ok(Profile {
-            home: Home {
-                city,
-                country: home_country,
-                airports,
-            },
+            home,
             countries,
+            currency,
             alert_channel,
             schedule,
             eligibility,
@@ -391,11 +428,14 @@ impl Profile {
         })
     }
 
+    /// Countries, with every region expanded to its countries or US states.
+    pub fn countries(&self) -> Countries {
+        Countries::expand(&self.countries)
+    }
+
+    /// Whether every Hackathon in this country passes Countries.
     pub fn includes_country(&self, country: &str) -> bool {
-        let country = country.trim();
-        self.countries
-            .iter()
-            .any(|c| c.to_lowercase() == country.to_lowercase())
+        self.countries().includes_country(country)
     }
 }
 
@@ -619,6 +659,7 @@ mod tests {
                     airports: vec!["BRU".into(), "CRL".into()],
                 },
                 countries: vec!["Belgium".into(), "France".into()],
+                currency: Currency::parse("EUR").unwrap(),
                 alert_channel: None,
                 schedule: Schedule::default(),
                 eligibility: Eligibility::default(),
@@ -1036,6 +1077,17 @@ mod tests {
             profile.agent.command.map(|c| c.program().to_owned()),
             Some("my-agent".to_owned())
         );
+        // And so are its commented-out currency and Sources.
+        let uncommented = text
+            .replace("# currency = ", "currency = ")
+            .replace("# [sources]", "[sources]")
+            .replace("# packs = ", "packs = ")
+            .replace("# ics = ", "ics = ")
+            .replace("# hackathonhub_pages_per_run", "hackathonhub_pages_per_run");
+        let profile = Profile::from_toml(&uncommented, &path).unwrap();
+        assert_eq!(profile.currency.code(), "EUR");
+        assert_eq!(profile.sources.packs, [Pack::NorthAmerica]);
+        assert_eq!(profile.sources.ics.len(), 1);
     }
 
     #[test]
@@ -1123,6 +1175,66 @@ mod tests {
                 .unwrap();
         assert_eq!(defaults.sources, SourceSettings::default());
         assert_eq!(defaults.sources.hackathonhub_pages_per_run, 40);
+    }
+
+    #[test]
+    fn the_currency_defaults_from_homes_country() {
+        let in_country = |country: &str| {
+            parse(&format!(
+                "countries = [\"Belgium\"]\n[home]\ncity = \"Somewhere\"\ncountry = {country:?}\nairports = [\"BRU\"]\n"
+            ))
+            .unwrap()
+            .currency
+        };
+        assert_eq!(in_country("United States").code(), "USD");
+        assert_eq!(in_country("Switzerland").code(), "CHF");
+        assert_eq!(in_country("France").code(), "EUR");
+        // A country with no known currency, and a Home without a country whose
+        // city isn't known, count in euros.
+        assert_eq!(in_country("Atlantis").code(), "EUR");
+        let unknown = parse(
+            "countries = [\"Belgium\"]\n[home]\ncity = \"Smallville\"\nairports = [\"BRU\"]\n",
+        )
+        .unwrap();
+        assert_eq!(unknown.home.country_name(), None);
+        assert_eq!(unknown.currency.code(), "EUR");
+        // Without a country, a known city gives it.
+        let toronto =
+            parse("countries = [\"Canada\"]\n[home]\ncity = \"Toronto\"\nairports = [\"YYZ\"]\n")
+                .unwrap();
+        assert_eq!(toronto.home.country_name().as_deref(), Some("Canada"));
+        assert_eq!(toronto.currency.code(), "CAD");
+    }
+
+    #[test]
+    fn the_profile_can_set_its_currency() {
+        let profile = parse(&format!("currency = \" gbp \"\n{HOME}")).unwrap();
+        assert_eq!(profile.currency.code(), "GBP");
+        assert_eq!(profile.currency.format(150), "£150");
+
+        let error = parse(&format!("currency = \"euros\"\n{HOME}")).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("currency: \"euros\" is not a currency code"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn countries_can_name_regions() {
+        let profile = parse(
+            "countries = [\"Schengen\", \"US West Coast\"]\n[home]\ncity = \"Brussels\"\nairports = [\"BRU\"]\n",
+        )
+        .unwrap();
+        assert_eq!(profile.countries, ["Schengen", "US West Coast"]);
+        let countries = profile.countries();
+        assert!(countries.includes("Norway", None));
+        assert!(!countries.includes("Ireland", None));
+        assert!(countries.includes("United States", Some("OR")));
+        assert!(!countries.includes("United States", Some("TX")));
+        assert!(profile.includes_country("Switzerland"));
+        assert!(!profile.includes_country("United States"));
     }
 
     #[test]

@@ -2,8 +2,20 @@
 //! are upcoming or open, a page at a time.
 //!
 //! Devpost gives each event's venue as its organiser typed it, often without a
-//! city or country, so the city (and from it the country) is only filled in
-//! when the venue names a known city.
+//! city or country (`Santa Clara Convention Center`, `Austin, TX`), so the
+//! country is read from the venue's text by [`places::from_venue`]: a US state
+//! or its code, a known city (North American ones included), a trailing
+//! country, or one of those named inside it (`University of Calgary`). A venue
+//! that names none of them, such as a bare building name, leaves the country
+//! unknown, and Countries then leaves the listing out.
+//!
+//! Known limitation: Devpost only gives a submission period, not the event's
+//! days. For an in-person event that period usually spans the event, but it
+//! can open weeks before it. Candidates from Devpost say so
+//! ([`Candidate::dates`] is [`Dates::SubmissionPeriod`]), so later rules and
+//! Fares don't take those dates as the days someone has to be there.
+//!
+//! [`Dates::SubmissionPeriod`]: crate::candidate::Dates::SubmissionPeriod
 
 use chrono::NaiveDate;
 use serde::Deserialize;
@@ -96,11 +108,7 @@ fn to_candidate(h: ApiHackathon) -> Option<Candidate> {
         .trim_end_matches("+ Online")
         .trim_end_matches("+ online")
         .trim();
-    let last = place.rsplit(',').next().unwrap_or(place).trim();
-    let (city, country) = match places::known_city(last) {
-        Some((city, country)) => (Some(city.to_owned()), Some(country.to_owned())),
-        None => (None, places::country_name(last).map(str::to_owned)),
-    };
+    let (city, country) = places::from_venue(place);
     Some(Candidate {
         source: NAME.to_owned(),
         source_key: h.id.to_string(),
