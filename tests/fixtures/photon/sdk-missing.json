@@ -1,0 +1,1 @@
+{"ok":false,"error":"sdk_missing","message":"the Photon SDK is not installed; run `npm ci` here"}
