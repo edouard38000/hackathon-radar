@@ -1,2 +1,4 @@
 # ICS fixtures are recorded byte for byte, CRLF line endings included.
 *.ics -text
+# The Sheet export is RFC 4180 CSV, CRLF line endings included.
+*.csv -text

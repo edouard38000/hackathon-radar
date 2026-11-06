@@ -223,17 +223,7 @@ fn entry(entry: &Entry) -> String {
     if let Some(travel) = travel(entry) {
         when_where.push_str(&format!(" · {travel}"));
     }
-    let mut application = format!("{} · ", entry.status.label());
-    match entry.deadline {
-        Some(deadline) => application.push_str(&format!("deadline {}", format_date(deadline))),
-        None => application.push_str("deadline unknown"),
-    }
-    match entry.reminder_days_left {
-        Some(0) => application.push_str(" (closes today)"),
-        Some(1) => application.push_str(" (1 day left)"),
-        Some(days) => application.push_str(&format!(" ({days} days left)")),
-        None => {}
-    }
+    let application = application_line(entry.status, entry.deadline, entry.reminder_days_left);
     let mut lines = vec![hackathon.name.clone(), when_where, application];
     lines.extend(hackathon.link.clone());
     lines.join("\n")
@@ -243,15 +233,11 @@ fn entry(entry: &Entry) -> String {
 /// lodging only`; otherwise the trip and the Fare.
 fn travel(entry: &Entry) -> Option<String> {
     if entry.is_funded() {
-        let mut funded = format!(
-            "{}Travel-funded ({})",
-            if entry.newly_funded { "newly " } else { "" },
-            entry.travel_funded.as_str()
-        );
-        if let Some(detail) = &entry.travel_detail {
-            funded.push_str(&format!(": {detail}"));
-        }
-        return Some(funded);
+        return Some(travel_funding(
+            entry.travel_funded,
+            entry.travel_detail.as_deref(),
+            entry.newly_funded,
+        ));
     }
     let parts: Vec<&str> = entry
         .trip
@@ -262,13 +248,55 @@ fn travel(entry: &Entry) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
+/// The application line of an entry: the status and the deadline, such as
+/// `Open · deadline 28 Nov 2026 (3 days left)`, with the days left when given.
+/// Reports and exports share it with Alerts, so the wording stays the same.
+pub fn application_line(
+    status: ApplicationStatus,
+    deadline: Option<NaiveDate>,
+    days_left: Option<i64>,
+) -> String {
+    let mut application = format!("{} · ", status.label());
+    match deadline {
+        Some(deadline) => application.push_str(&format!("deadline {}", format_date(deadline))),
+        None => application.push_str("deadline unknown"),
+    }
+    if let Some(days) = days_left {
+        application.push_str(&format!(" ({})", days_left_text(days)));
+    }
+    application
+}
+
+/// `closes today`, `1 day left` or `3 days left`.
+pub fn days_left_text(days: i64) -> String {
+    match days {
+        0 => "closes today".to_owned(),
+        1 => "1 day left".to_owned(),
+        days => format!("{days} days left"),
+    }
+}
+
+/// `Travel-funded (partial): lodging only`, or `newly Travel-funded (full)`
+/// for one that became so since it was judged.
+pub fn travel_funding(funded: TravelFunded, detail: Option<&str>, newly: bool) -> String {
+    let mut text = format!(
+        "{}Travel-funded ({})",
+        if newly { "newly " } else { "" },
+        funded.as_str()
+    );
+    if let Some(detail) = detail {
+        text.push_str(&format!(": {detail}"));
+    }
+    text
+}
+
 /// `28 Nov 2026`.
-fn format_date(day: NaiveDate) -> String {
+pub fn format_date(day: NaiveDate) -> String {
     format_dates(day, day)
 }
 
 /// `12 Mar 2027`, `20–22 Nov 2026`, `30 Nov – 2 Dec 2026` or `30 Dec 2026 – 2 Jan 2027`.
-fn format_dates(start: NaiveDate, end: NaiveDate) -> String {
+pub fn format_dates(start: NaiveDate, end: NaiveDate) -> String {
     let day_month = |d: NaiveDate| format!("{} {}", d.day(), d.format("%b"));
     if start == end {
         format!("{} {}", day_month(start), start.year())

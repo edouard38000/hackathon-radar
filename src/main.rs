@@ -10,11 +10,13 @@ use hackathon_radar::alert::ntfy::{self, NtfyChannel};
 use hackathon_radar::alert::photon::{self, PhotonChannel};
 use hackathon_radar::alert::{AlertChannel, PrintChannel};
 use hackathon_radar::clock::{Clock, SystemClock};
+use hackathon_radar::export;
 use hackathon_radar::fares::FareLookup;
 use hackathon_radar::fares::serpapi::SerpApi;
 use hackathon_radar::http::HttpClient;
 use hackathon_radar::process::SystemRunner;
 use hackathon_radar::profile::{AlertChannelSetting, Profile};
+use hackathon_radar::report::{self, Report, Scope};
 use hackathon_radar::run::{self, RunDeps, RunOptions};
 use hackathon_radar::sources::Source;
 use hackathon_radar::sources::hackathonhub;
@@ -35,6 +37,10 @@ enum Command {
     Run(RunArgs),
     /// Install, remove or check the recurring Run (launchd on macOS, systemd on Linux).
     Schedule(ScheduleArgs),
+    /// Write a Markdown (or HTML) report of the Hackathons that Fit, sorted by date.
+    Report(ReportArgs),
+    /// Export the deadlines as a calendar file, or the Hackathons as a CSV for Google Sheets.
+    Export(ExportArgs),
 }
 
 #[derive(clap::Args)]
@@ -57,6 +63,8 @@ fn main() -> ExitCode {
     let result = match cli.command {
         Command::Run(args) => run_command(args),
         Command::Schedule(args) => schedule_command(args),
+        Command::Report(args) => report_command(args),
+        Command::Export(args) => export_command(args),
     };
     match result {
         Ok(code) => code,
@@ -351,6 +359,125 @@ fn schedule_command(args: ScheduleArgs) -> anyhow::Result<ExitCode> {
                 println!("  {}", file.display());
             }
             println!("Scheduled Runs append their output to {}.", log.display());
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+#[derive(clap::Args)]
+struct ReportArgs {
+    /// Write HTML instead of Markdown.
+    #[arg(long)]
+    html: bool,
+
+    #[command(flatten)]
+    output: OutputArgs,
+}
+
+#[derive(clap::Args)]
+struct ExportArgs {
+    #[command(subcommand)]
+    what: ExportWhat,
+}
+
+#[derive(Subcommand)]
+enum ExportWhat {
+    /// An .ics calendar with an all-day "Apply" event on each open deadline.
+    Ics(OutputArgs),
+    /// A CSV laid out like the personal tracker's Sheet, to import into Google Sheets.
+    Sheet(OutputArgs),
+}
+
+/// What reports and exports share: what to include, where to read, where to write.
+#[derive(clap::Args)]
+struct OutputArgs {
+    /// Include Hackathons that don't Fit or are closed.
+    #[arg(long)]
+    all: bool,
+
+    /// Write to this file instead of stdout.
+    #[arg(long, value_name = "FILE")]
+    out: Option<PathBuf>,
+
+    /// The Profile file [default: ~/.config/hackathon-radar/profile.toml]
+    #[arg(long, value_name = "PATH")]
+    profile: Option<PathBuf>,
+
+    /// The database file [default: ~/.local/share/hackathon-radar/hackathon-radar.sqlite]
+    #[arg(long, value_name = "PATH")]
+    db: Option<PathBuf>,
+}
+
+impl OutputArgs {
+    fn scope(&self) -> Scope {
+        if self.all { Scope::All } else { Scope::Fitting }
+    }
+
+    /// The Profile and the store. A database that doesn't exist yet reads as
+    /// empty, and isn't created.
+    fn open(&self) -> anyhow::Result<(Profile, Store)> {
+        let profile_path = match &self.profile {
+            Some(path) => path.clone(),
+            None => paths::default_profile_path()?,
+        };
+        let db_path = match &self.db {
+            Some(path) => path.clone(),
+            None => paths::default_database_path()?,
+        };
+        let profile = Profile::load(&profile_path)?;
+        let store = if db_path.exists() {
+            Store::open(&db_path)?
+        } else {
+            Store::open_in_memory()?
+        };
+        Ok((profile, store))
+    }
+
+    /// Writes `text` to the file, or to stdout, and says what was written on stderr.
+    fn write(&self, text: &str, summary: &str) -> anyhow::Result<()> {
+        match &self.out {
+            Some(path) => {
+                std::fs::write(path, text)
+                    .with_context(|| format!("writing {}", path.display()))?;
+                eprintln!("{summary} Written to {}.", path.display());
+            }
+            None => {
+                use std::io::Write;
+                std::io::stdout().write_all(text.as_bytes())?;
+                eprintln!("{summary}");
+            }
+        }
+        Ok(())
+    }
+}
+
+fn report_command(args: ReportArgs) -> anyhow::Result<ExitCode> {
+    let (profile, store) = args.output.open()?;
+    let report = Report::build(&store, &profile, SystemClock.today(), args.output.scope())?;
+    let text = if args.html {
+        report.html()
+    } else {
+        report.markdown()
+    };
+    args.output.write(&text, &report.summary_line())?;
+    Ok(ExitCode::SUCCESS)
+}
+
+fn export_command(args: ExportArgs) -> anyhow::Result<ExitCode> {
+    let clock = SystemClock;
+    let today = clock.today();
+    match args.what {
+        ExportWhat::Ics(output) => {
+            let (profile, store) = output.open()?;
+            let listed = report::collect(&store, &profile, today, output.scope())?;
+            let calendar = export::ics::calendar(&listed, &profile, clock.now());
+            output.write(&calendar.text, &calendar.summary())?;
+        }
+        ExportWhat::Sheet(output) => {
+            let (profile, store) = output.open()?;
+            let listed = report::collect(&store, &profile, today, output.scope())?;
+            let sheet = export::sheet::sheet(&listed, &profile, today)?;
+            output.write(&sheet.text, &sheet.summary())?;
         }
     }
     Ok(ExitCode::SUCCESS)

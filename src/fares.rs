@@ -234,55 +234,25 @@ pub fn price(
     today: NaiveDate,
     ask_agent: bool,
 ) -> anyhow::Result<Priced> {
-    let mut priced = Priced {
-        currency: profile.currency.clone(),
-        home_airport: profile.home.airports[0].clone(),
-        ..Priced::default()
-    };
+    let mut priced = Priced::empty(profile);
     let Some(budget) = profile.travel.flight_budget else {
         return Ok(priced);
     };
     let settings = &profile.fares;
-    let horizon = today + Days::new(u64::from(settings.horizon_weeks) * 7);
 
     // The flight Trips that need a Fare, and which of those to look up now.
-    let mut flights: Vec<(&Candidate, Option<FareQuery>)> = Vec::new();
+    let mut flights: Vec<(&Candidate, FareQuery)> = Vec::new();
     let mut wanted: Vec<(FareQuery, String)> = Vec::new();
     let mut seen = HashSet::new();
     for hackathon in fitting {
-        let Some(Trip {
-            kind: TripKind::Flight,
-            airport: Some(airport),
-            ..
-        }) = travelled.trip(hackathon)
-        else {
-            continue;
+        let query = match settle(profile, store, hackathon, travelled.trip(hackathon), today)? {
+            Settled::NoCheck => continue,
+            Settled::Checked(check) => {
+                priced.checks.insert(key_of(hackathon), check);
+                continue;
+            }
+            Settled::Query(query) => query,
         };
-        let funded = store
-            .judgement(&hackathon.source, &hackathon.source_key)?
-            .map_or(TravelFunded::None, |j| j.travel_funded);
-        // The Travel-funded rule lets a Travel-funded Hackathon skip the budget.
-        if funded != TravelFunded::None && profile.travel.travel_funded_anywhere {
-            priced
-                .checks
-                .insert(key_of(hackathon), FareCheck::TravelPaid(funded));
-            flights.push((hackathon, None));
-            continue;
-        }
-        // A submission period (Devpost) isn't the days someone has to be there,
-        // so there are no reliable flight dates: no Fare is looked up, and the
-        // Flight budget can't decide it. It is left unchecked, as without a
-        // budget, rather than held back for a Fare that will never come.
-        if hackathon.dates() == Dates::SubmissionPeriod {
-            continue;
-        }
-        // Beyond the horizon: announced without a Fare, so its application
-        // deadline can't pass while it waits; the budget decides it later.
-        if hackathon.start > horizon {
-            priced.checks.insert(key_of(hackathon), FareCheck::Later);
-            continue;
-        }
-        let query = FareQuery::for_hackathon(profile, hackathon, airport);
         let cached = store.fare(&query)?;
         let due = match &cached {
             None => true,
@@ -295,7 +265,7 @@ pub fn price(
             let city = hackathon.city.clone().unwrap_or_default();
             wanted.push((query.clone(), city));
         }
-        flights.push((hackathon, Some(query)));
+        flights.push((hackathon, query));
     }
 
     // Soonest first, so the Hackathons closest to their dates get a Fare first.
@@ -341,17 +311,106 @@ pub fn price(
     }
 
     for (hackathon, query) in flights {
-        let Some(query) = query else { continue };
-        let check = match store.fare(&query)? {
-            Some(fare) if fare.price.is_some() => FareCheck::Priced {
-                within_budget: fare.price.is_some_and(|p| p <= budget),
-                fare,
-            },
-            _ => FareCheck::Waiting,
-        };
+        let check = stored_check(store, &query, budget)?;
         priced.checks.insert(key_of(hackathon), check);
     }
     Ok(priced)
+}
+
+impl Priced {
+    fn empty(profile: &Profile) -> Self {
+        Priced {
+            currency: profile.currency.clone(),
+            home_airport: profile.home.airports[0].clone(),
+            ..Priced::default()
+        }
+    }
+
+    /// Where each of `hackathons` stands with the Flight budget, from the
+    /// stored Trips and Fares alone: nothing is looked up or stored. Reports
+    /// and exports use it, so they decide the budget as the last Run did.
+    pub fn from_store(
+        profile: &Profile,
+        store: &Store,
+        hackathons: &[Candidate],
+        today: NaiveDate,
+    ) -> anyhow::Result<Self> {
+        let mut priced = Priced::empty(profile);
+        let Some(budget) = profile.travel.flight_budget else {
+            return Ok(priced);
+        };
+        for hackathon in hackathons {
+            let trip = store.trip(&hackathon.source, &hackathon.source_key)?;
+            let check = match settle(profile, store, hackathon, trip.as_ref(), today)? {
+                Settled::NoCheck => continue,
+                Settled::Checked(check) => check,
+                Settled::Query(query) => stored_check(store, &query, budget)?,
+            };
+            priced.checks.insert(key_of(hackathon), check);
+        }
+        Ok(priced)
+    }
+}
+
+/// What the Flight budget needs to know about one Hackathon before any lookup.
+enum Settled {
+    /// Not a flight with an airport, or dates that give no flight dates: the budget doesn't decide it.
+    NoCheck,
+    /// Decided without a Fare.
+    Checked(FareCheck),
+    /// Decided by the Fare for this query.
+    Query(FareQuery),
+}
+
+fn settle(
+    profile: &Profile,
+    store: &Store,
+    hackathon: &Candidate,
+    trip: Option<&Trip>,
+    today: NaiveDate,
+) -> anyhow::Result<Settled> {
+    let Some(Trip {
+        kind: TripKind::Flight,
+        airport: Some(airport),
+        ..
+    }) = trip
+    else {
+        return Ok(Settled::NoCheck);
+    };
+    let funded = store
+        .judgement(&hackathon.source, &hackathon.source_key)?
+        .map_or(TravelFunded::None, |j| j.travel_funded);
+    // The Travel-funded rule lets a Travel-funded Hackathon skip the budget.
+    if funded != TravelFunded::None && profile.travel.travel_funded_anywhere {
+        return Ok(Settled::Checked(FareCheck::TravelPaid(funded)));
+    }
+    // A submission period (Devpost) isn't the days someone has to be there,
+    // so there are no reliable flight dates: no Fare is looked up, and the
+    // Flight budget can't decide it. It is left unchecked, as without a
+    // budget, rather than held back for a Fare that will never come.
+    if hackathon.dates() == Dates::SubmissionPeriod {
+        return Ok(Settled::NoCheck);
+    }
+    // Beyond the horizon: announced without a Fare, so its application
+    // deadline can't pass while it waits; the budget decides it later.
+    let horizon = today + Days::new(u64::from(profile.fares.horizon_weeks) * 7);
+    if hackathon.start > horizon {
+        return Ok(Settled::Checked(FareCheck::Later));
+    }
+    Ok(Settled::Query(FareQuery::for_hackathon(
+        profile, hackathon, airport,
+    )))
+}
+
+/// The stored Fare's verdict, or waiting when there is no price yet.
+fn stored_check(store: &Store, query: &FareQuery, budget: u32) -> anyhow::Result<FareCheck> {
+    Ok(match store.fare(query)? {
+        Some(fare) if fare.price.is_some() => FareCheck::Priced {
+            within_budget: fare.price.is_some_and(|p| p <= budget),
+            fare,
+        },
+        _ => FareCheck::Waiting,
+    })
 }
 
 #[cfg(test)]
