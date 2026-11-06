@@ -10,9 +10,9 @@
 //! - `outbound_date` / `return_date`: start − 1 day and end + 1 day, `YYYY-MM-DD`;
 //! - `type=1` (round trip), `travel_class=1` (economy), `adults=1`;
 //! - `currency`: the Profile's currency; `hl=en`;
-//! - `api_key`: the key, read from `SERPAPI_API_KEY` (ticket 12 moves it to
-//!   the keychain). It is never stored in the Profile, never printed, and is
-//!   scrubbed from every error.
+//! - `api_key`: the person's key, from the secret store ([`crate::secrets`]:
+//!   `SERPAPI_API_KEY`, then the keychain). It is never stored in the Profile,
+//!   never printed, and is scrubbed from every error.
 //!
 //! The reply's `best_flights` and `other_flights` hold the outbound options of
 //! the round trip, each with the round-trip `price` and its `flights`, the
@@ -33,7 +33,7 @@ use crate::http::HttpGet;
 /// The search endpoint.
 pub const ENDPOINT: &str = "https://serpapi.com/search";
 
-/// The environment variable the key is read from, for now.
+/// The environment variable that overrides the key in the keychain.
 pub const KEY_VAR: &str = "SERPAPI_API_KEY";
 
 /// What SerpApi's `error` says when Google Flights has nothing for the query.
@@ -58,15 +58,6 @@ impl<H: HttpGet> SerpApi<H> {
             http,
             key: key.into(),
         }
-    }
-
-    /// With the key from `SERPAPI_API_KEY`, or `None` when it isn't set.
-    pub fn from_env(http: H) -> Option<Self> {
-        std::env::var(KEY_VAR)
-            .ok()
-            .map(|key| key.trim().to_owned())
-            .filter(|key| !key.is_empty())
-            .map(|key| Self::new(http, key))
     }
 
     /// The search URL for `query`, key included.

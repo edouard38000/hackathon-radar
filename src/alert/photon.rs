@@ -17,9 +17,10 @@ use crate::alert::{Alert, AlertChannel};
 use crate::process::{Command, Output, ProcessRunner};
 use crate::profile::PhotonSetting;
 
-/// Where the Photon project ID is read from, until the keychain holds it.
+/// The Photon project ID's name: the environment variable that overrides the
+/// one in the keychain ([`crate::secrets`]), and the variable the sidecar reads.
 pub const PROJECT_ID_ENV_VAR: &str = "PHOTON_PROJECT_ID";
-/// Where the Photon project secret is read from, until the keychain holds it.
+/// The Photon project secret's name, as for [`PROJECT_ID_ENV_VAR`].
 pub const PROJECT_SECRET_ENV_VAR: &str = "PHOTON_PROJECT_SECRET";
 /// Points at another copy of the sidecar directory than the bundled one.
 pub const SIDECAR_DIR_ENV_VAR: &str = "HACKATHON_RADAR_PHOTON_SIDECAR_DIR";
@@ -34,7 +35,8 @@ pub const MIN_NODE_VERSION: &str = "20.18.1";
 /// up on its own after 45 seconds, so this only catches a sidecar that hangs.
 pub const TIMEOUT: Duration = Duration::from_secs(60);
 
-const DASHBOARD: &str = "https://app.photon.codes";
+/// Where a person signs up and finds their project's ID and secret.
+pub const DASHBOARD: &str = "https://app.photon.codes";
 
 /// A Photon project's ID and secret. `Debug` never shows the secret.
 #[derive(Clone, PartialEq, Eq)]
@@ -51,17 +53,9 @@ impl Credentials {
         }
     }
 
-    /// Reads [`PROJECT_ID_ENV_VAR`] and [`PROJECT_SECRET_ENV_VAR`]. The Profile
-    /// never holds them; the keychain will (ticket 12).
-    pub fn from_env() -> anyhow::Result<Self> {
-        Self::from_vars(
-            std::env::var(PROJECT_ID_ENV_VAR).ok(),
-            std::env::var(PROJECT_SECRET_ENV_VAR).ok(),
-        )
-    }
-
-    /// The credentials from these values of the two variables, or an error
-    /// naming each one that is unset or empty.
+    /// The credentials from these values of the two secrets, as the secret
+    /// store ([`crate::secrets`]) found them, or an error naming each one that
+    /// is missing or empty.
     pub fn from_vars(id: Option<String>, secret: Option<String>) -> anyhow::Result<Self> {
         let id = id.map(|v| v.trim().to_owned()).filter(|v| !v.is_empty());
         let secret = secret
@@ -79,7 +73,8 @@ impl Credentials {
                 .collect();
                 anyhow::bail!(
                     "Photon Alerts need your Photon project credentials, but {} {} not set. \
-                     Set {PROJECT_ID_ENV_VAR} and {PROJECT_SECRET_ENV_VAR} in the environment; \
+                     Run `hackathon-radar init` to store them in your keychain, or set \
+                     {PROJECT_ID_ENV_VAR} and {PROJECT_SECRET_ENV_VAR} in the environment; \
                      your project's ID and secret are in the Photon dashboard ({DASHBOARD}). \
                      They never go in the Profile.",
                     missing.join(" and "),
@@ -153,7 +148,7 @@ pub struct PhotonChannel<R> {
 
 impl<R: ProcessRunner> PhotonChannel<R> {
     /// With `Err` credentials, every send fails with that error, which says how
-    /// to set them (see [`Credentials::from_env`]).
+    /// to set them (see [`Credentials::from_vars`]).
     pub fn new(
         setting: PhotonSetting,
         credentials: Result<Credentials, String>,
@@ -218,13 +213,14 @@ impl<R: ProcessRunner> PhotonChannel<R> {
                 to = self.setting.to
             ),
             "bad_credentials" => anyhow::bail!(
-                "Photon refused your project credentials ({detail}). Check {PROJECT_ID_ENV_VAR} \
-                 and {PROJECT_SECRET_ENV_VAR} against your project in the Photon dashboard \
-                 ({DASHBOARD})."
+                "Photon refused your project credentials ({detail}). Check your project's ID and \
+                 secret in the Photon dashboard ({DASHBOARD}) and store them again with \
+                 `hackathon-radar init` (or {PROJECT_ID_ENV_VAR} and {PROJECT_SECRET_ENV_VAR}, if \
+                 you set them in the environment)."
             ),
             "missing_credentials" => anyhow::bail!(
-                "the Photon sidecar got no project credentials ({detail}); set \
-                 {PROJECT_ID_ENV_VAR} and {PROJECT_SECRET_ENV_VAR}"
+                "the Photon sidecar got no project credentials ({detail}); run \
+                 `hackathon-radar init` to store them"
             ),
             "sdk_missing" => anyhow::bail!(
                 "the Photon sidecar's dependencies aren't installed. Run `npm ci` once in {dir} \

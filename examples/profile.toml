@@ -1,5 +1,7 @@
-# An example Profile. Copy it to ~/.config/hackathon-radar/profile.toml
-# (or pass it with --profile) and change it to suit you. It holds no secrets.
+# An example Profile. `hackathon-radar init` writes yours for you; or copy this
+# to ~/.config/hackathon-radar/profile.toml (or pass it with --profile) and
+# change it to suit you. It holds no secrets: `init` stores keys and tokens in
+# your keychain.
 
 # The countries you'll travel to at your own cost. A region stands for its
 # members: "Schengen", "European Union" (or "EU"), "EEA", "Europe", "Benelux",
@@ -10,6 +12,9 @@ countries = ["Belgium", "France", "Netherlands", "Luxembourg"]
 # The currency you count money in, as an ISO code. Optional: without it, the
 # currency of Home's country (the euro if it isn't known).
 # currency = "EUR"
+
+# Themes: subjects you want Hackathons about. Optional.
+# themes = ["AI agents", "climate"]
 
 # The city you travel from, its country (optional; with it, train trips within
 # that country count as local), and the airports you fly out of (IATA codes).
@@ -33,7 +38,7 @@ airports = ["BRU", "CRL"]
 # The Flight budget: the most you'd pay for a return flight, in your currency.
 # With it, a flight Fits only when its Fare is at or under the budget (under the
 # Travel-funded rule, a Travel-funded Hackathon skips it). Fares come from Google Flights through your
-# own SerpApi key, set as SERPAPI_API_KEY in the environment; without a key,
+# own SerpApi key, which `hackathon-radar init` stores in your keychain; without a key,
 # your Agent estimates them and they are marked unverified.
 # flight_budget = 200
 #
@@ -54,8 +59,8 @@ airports = ["BRU", "CRL"]
 # ntfy (https://ntfy.sh) needs no account: install its phone app, subscribe to
 # a topic, and put the same topic here. Anyone who knows a topic on ntfy.sh can
 # read it, so pick a long, hard-to-guess one instead of this example.
-# Add `server = "https://ntfy.example.org"` to use your own ntfy server, and set
-# HACKATHON_RADAR_NTFY_TOKEN in the environment if that server needs an access token.
+# Add `server = "https://ntfy.example.org"` to use your own ntfy server; if it
+# needs an access token, `hackathon-radar init` stores it in your keychain.
 # [alert_channel]
 # kind = "ntfy"
 # topic = "hackathon-radar-example-7f3k9q"
@@ -63,7 +68,7 @@ airports = ["BRU", "CRL"]
 # For iMessage Alerts from your own Photon line instead (see the README), use
 #   kind = "photon"
 #   to = "+32470123456"    (your phone number, in E.164 format)
-# and set PHOTON_PROJECT_ID and PHOTON_PROJECT_SECRET in the environment.
+# and let `hackathon-radar init` store your Photon project ID and secret in your keychain.
 
 # When `hackathon-radar schedule install` runs a Run, in local time. Optional:
 # without it, Runs happen every Monday and Thursday at 08:00.

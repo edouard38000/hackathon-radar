@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::rc::Rc;
 
@@ -6,22 +6,22 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 
 use hackathon_radar::agent;
-use hackathon_radar::alert::ntfy::{self, NtfyChannel};
-use hackathon_radar::alert::photon::{self, PhotonChannel};
-use hackathon_radar::alert::{AlertChannel, PrintChannel};
+use hackathon_radar::alert::photon::Sidecar;
 use hackathon_radar::clock::{Clock, SystemClock};
 use hackathon_radar::export;
 use hackathon_radar::fares::FareLookup;
-use hackathon_radar::fares::serpapi::SerpApi;
 use hackathon_radar::http::HttpClient;
+use hackathon_radar::init::{self, InitEnv, InitFlags, StdTerminal};
 use hackathon_radar::process::SystemRunner;
 use hackathon_radar::profile::{AlertChannelSetting, Profile};
 use hackathon_radar::report::{self, Report, Scope};
 use hackathon_radar::run::{self, RunDeps, RunOptions};
+use hackathon_radar::secrets::Secrets;
 use hackathon_radar::sources::Source;
 use hackathon_radar::sources::hackathonhub;
 use hackathon_radar::sources::packs;
 use hackathon_radar::sources::polite::PoliteHttp;
+use hackathon_radar::wiring;
 use hackathon_radar::{paths, store::Store};
 
 #[derive(Parser)]
@@ -33,8 +33,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Set up hackathon-radar, or change your Profile: Home, Countries, budget, Agent, keys and Alert channel.
+    Init(Box<InitArgs>),
     /// Collect Hackathons from the Sources, store those that Fit, and compose the Alert.
     Run(RunArgs),
+    /// Send one short test Alert through the Profile's Alert channel.
+    TestAlert(TestAlertArgs),
     /// Install, remove or check the recurring Run (launchd on macOS, systemd on Linux).
     Schedule(ScheduleArgs),
     /// Write a Markdown (or HTML) report of the Hackathons that Fit, sorted by date.
@@ -43,6 +47,27 @@ enum Command {
     Export(ExportArgs),
     /// Import the personal tracker: a CSV export of its Sheet's Hackathons tab.
     ImportSheet(ImportSheetArgs),
+}
+
+#[derive(clap::Args)]
+struct InitArgs {
+    /// The Profile file to write or edit [default: ~/.config/hackathon-radar/profile.toml]
+    #[arg(long, value_name = "PATH")]
+    profile: Option<PathBuf>,
+
+    /// The database file scheduled Runs use [default: ~/.local/share/hackathon-radar/hackathon-radar.sqlite]
+    #[arg(long, value_name = "PATH")]
+    db: Option<PathBuf>,
+
+    #[command(flatten)]
+    flags: InitFlags,
+}
+
+#[derive(clap::Args)]
+struct TestAlertArgs {
+    /// The Profile file [default: ~/.config/hackathon-radar/profile.toml]
+    #[arg(long, value_name = "PATH")]
+    profile: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -63,7 +88,9 @@ struct RunArgs {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
+        Command::Init(args) => init_command(*args),
         Command::Run(args) => run_command(args),
+        Command::TestAlert(args) => test_alert_command(args),
         Command::Schedule(args) => schedule_command(args),
         Command::Report(args) => report_command(args),
         Command::Export(args) => export_command(args),
@@ -90,14 +117,27 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
     let profile = Profile::load(&profile_path)?;
     let mut store = Store::open(&db_path)?;
     let sources = sources(&profile, &store)?;
-    let mut channel = alert_channel(&profile, args.dry_run)?;
+    // Secrets come from the keychain (or its owner-only file), so scheduled
+    // Runs have them without the person's shell environment.
+    let secrets = Secrets::system()?;
+    let mut channel = wiring::alert_channel(
+        &profile,
+        &secrets,
+        args.dry_run,
+        HttpClient::new(),
+        SystemRunner,
+        Sidecar::locate(),
+    )?;
     let agent = agent::from_settings(&profile.agent);
     if let Some(warning) = agent.warning() {
         eprintln!("warning: {warning}");
     }
     // Fares on the person's own SerpApi key, if set; without it, the Agent
     // estimates Unverified fares. The key is never printed.
-    let serpapi = SerpApi::from_env(PoliteHttp::new(HttpClient::new()).ignoring_robots());
+    let serpapi = wiring::fare_lookup(
+        &secrets,
+        PoliteHttp::new(HttpClient::new()).ignoring_robots(),
+    )?;
 
     let outcome = run::run(
         RunDeps {
@@ -165,7 +205,7 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
             if serpapi.is_some() {
                 "Looked up"
             } else {
-                "Without SERPAPI_API_KEY, the Agent estimated"
+                "Without a SerpApi key, the Agent estimated"
             },
             outcome.fares_looked_up,
             outcome.over_budget,
@@ -222,29 +262,57 @@ fn sources(profile: &Profile, store: &Store) -> anyhow::Result<Vec<Box<dyn Sourc
     ))
 }
 
-/// The Alert channel the Profile names, or printing when it names none.
-fn alert_channel(profile: &Profile, dry_run: bool) -> anyhow::Result<Box<dyn AlertChannel>> {
-    Ok(match &profile.alert_channel {
-        Some(AlertChannelSetting::Ntfy(setting)) => Box::new(NtfyChannel::new(
-            setting.clone(),
-            ntfy::token_from_env(),
-            HttpClient::new(),
-        )),
-        Some(AlertChannelSetting::Photon(setting)) => {
-            let credentials = photon::Credentials::from_env().map_err(|e| e.to_string());
-            // Checked before the Run, so missing credentials don't waste the Agent's work.
-            if let (false, Err(why)) = (dry_run, &credentials) {
-                anyhow::bail!("{why}");
-            }
-            Box::new(PhotonChannel::new(
-                setting.clone(),
-                credentials,
-                photon::Sidecar::locate(),
-                SystemRunner,
-            ))
-        }
-        None => Box::new(PrintChannel),
+fn init_command(args: InitArgs) -> anyhow::Result<ExitCode> {
+    let profile_path = match args.profile {
+        Some(path) => path,
+        None => paths::default_profile_path()?,
+    };
+    let secrets = Secrets::system()?;
+    let path_var = std::env::var_os("PATH");
+    let find_program = |name: &str| init::find_on_path(name, path_var.as_deref());
+    let db = args.db;
+    let mut install_schedule = |profile: &Path| schedule_install(Some(profile.into()), db.clone());
+    let mut terminal = StdTerminal::new();
+    let outcome = init::init(
+        &profile_path,
+        &args.flags,
+        InitEnv {
+            terminal: &mut terminal,
+            secrets: &secrets,
+            find_program: &find_program,
+            runner: &SystemRunner,
+            http: &HttpClient::new(),
+            sidecar: Sidecar::locate(),
+            install_schedule: &mut install_schedule,
+        },
+    )?;
+    Ok(if outcome.succeeded() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     })
+}
+
+fn test_alert_command(args: TestAlertArgs) -> anyhow::Result<ExitCode> {
+    let profile_path = match args.profile {
+        Some(path) => path,
+        None => paths::default_profile_path()?,
+    };
+    let profile = Profile::load(&profile_path)?;
+    let secrets = Secrets::system()?;
+    let name = wiring::channel_name(&profile);
+    let mut channel = wiring::alert_channel(
+        &profile,
+        &secrets,
+        false,
+        HttpClient::new(),
+        SystemRunner,
+        Sidecar::locate(),
+    )?;
+    wiring::send_test_alert(channel.as_mut())
+        .with_context(|| format!("the test Alert through {name} was not sent"))?;
+    println!("Sent a test Alert through {name}. Check your phone.");
+    Ok(ExitCode::SUCCESS)
 }
 
 #[derive(clap::Args)]
@@ -377,75 +445,13 @@ struct ScheduleInstallArgs {
 }
 
 fn schedule_command(args: ScheduleArgs) -> anyhow::Result<ExitCode> {
-    use hackathon_radar::scheduler::{self, Platform, ScheduledRun, SystemCommandRunner};
+    use hackathon_radar::scheduler::{self, Platform, SystemCommandRunner};
 
     let mut runner = SystemCommandRunner;
     let platform = Platform::detect(&mut runner)?;
     let log = paths::default_log_path()?;
     match args.action {
-        ScheduleAction::Install(args) => {
-            // launchd and systemd start Runs from `/`, so every path must be absolute.
-            let profile_path = std::path::absolute(match args.profile {
-                Some(path) => path,
-                None => paths::default_profile_path()?,
-            })?;
-            let db_path = std::path::absolute(match args.db {
-                Some(path) => path,
-                None => paths::default_database_path()?,
-            })?;
-            let profile = Profile::load(&profile_path)?;
-            let binary =
-                std::env::current_exe().context("could not find the path of this binary")?;
-            let run_path = scheduler::RunPath::from_env(std::env::var_os("PATH"));
-            let job = ScheduledRun {
-                binary,
-                profile: profile_path,
-                db: db_path,
-                log,
-                schedule: profile.schedule,
-                path: run_path.value.clone(),
-            };
-            let installed = scheduler::install(&platform, &job, &mut runner)?;
-            println!(
-                "{} the schedule: a Run {} (local time).",
-                if installed.replaced {
-                    "Updated"
-                } else {
-                    "Installed"
-                },
-                job.schedule
-            );
-            for file in &installed.files {
-                println!("  {}", file.display());
-            }
-            println!("Each Run appends its output to {}.", job.log.display());
-            if run_path.defaulted {
-                println!(
-                    "PATH is not set in this shell, so Runs use {}.",
-                    run_path.value
-                );
-            } else {
-                println!("Runs use this shell's PATH, so they find the same tools you do.");
-            }
-            println!(
-                "If you install or move your Agent's CLI (claude, codex) later, run \
-                 `hackathon-radar schedule install` again to refresh the PATH."
-            );
-            if matches!(platform, Platform::Systemd { .. }) {
-                println!(
-                    "systemd only runs user timers while you are logged in; to keep Runs going \
-                     when you are logged out, run `loginctl enable-linger`."
-                );
-            }
-            if scheduler::is_cargo_build_output(&job.binary) {
-                eprintln!(
-                    "warning: the schedule runs {}, a Cargo build output that `cargo clean` \
-                     removes; install the binary (`cargo install --path .`) and run \
-                     `hackathon-radar schedule install` from it.",
-                    job.binary.display()
-                );
-            }
-        }
+        ScheduleAction::Install(args) => schedule_install(args.profile, args.db)?,
         ScheduleAction::Uninstall => match scheduler::uninstall(&platform, &mut runner)? {
             scheduler::Uninstalled::Removed { files } => {
                 println!("Removed the schedule:");
@@ -586,6 +592,77 @@ fn export_command(args: ExportArgs) -> anyhow::Result<ExitCode> {
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// `schedule install`, which `init` also runs: installs the recurring Run, or
+/// updates it.
+fn schedule_install(profile: Option<PathBuf>, db: Option<PathBuf>) -> anyhow::Result<()> {
+    use hackathon_radar::scheduler::{self, Platform, ScheduledRun, SystemCommandRunner};
+
+    let mut runner = SystemCommandRunner;
+    let platform = Platform::detect(&mut runner)?;
+    let log = paths::default_log_path()?;
+    // launchd and systemd start Runs from `/`, so every path must be absolute.
+    let profile_path = std::path::absolute(match profile {
+        Some(path) => path,
+        None => paths::default_profile_path()?,
+    })?;
+    let db_path = std::path::absolute(match db {
+        Some(path) => path,
+        None => paths::default_database_path()?,
+    })?;
+    let profile = Profile::load(&profile_path)?;
+    let binary = std::env::current_exe().context("could not find the path of this binary")?;
+    let run_path = scheduler::RunPath::from_env(std::env::var_os("PATH"));
+    let job = ScheduledRun {
+        binary,
+        profile: profile_path,
+        db: db_path,
+        log,
+        schedule: profile.schedule,
+        path: run_path.value.clone(),
+    };
+    let installed = scheduler::install(&platform, &job, &mut runner)?;
+    println!(
+        "{} the schedule: a Run {} (local time).",
+        if installed.replaced {
+            "Updated"
+        } else {
+            "Installed"
+        },
+        job.schedule
+    );
+    for file in &installed.files {
+        println!("  {}", file.display());
+    }
+    println!("Each Run appends its output to {}.", job.log.display());
+    if run_path.defaulted {
+        println!(
+            "PATH is not set in this shell, so Runs use {}.",
+            run_path.value
+        );
+    } else {
+        println!("Runs use this shell's PATH, so they find the same tools you do.");
+    }
+    println!(
+        "If you install or move your Agent's CLI (claude, codex) later, run \
+         `hackathon-radar schedule install` again to refresh the PATH."
+    );
+    if matches!(platform, Platform::Systemd { .. }) {
+        println!(
+            "systemd only runs user timers while you are logged in; to keep Runs going \
+             when you are logged out, run `loginctl enable-linger`."
+        );
+    }
+    if scheduler::is_cargo_build_output(&job.binary) {
+        eprintln!(
+            "warning: the schedule runs {}, a Cargo build output that `cargo clean` \
+             removes; install the binary (`cargo install --path .`) and run \
+             `hackathon-radar schedule install` from it.",
+            job.binary.display()
+        );
+    }
+    Ok(())
 }
 
 fn status_message(installed: bool, active: bool) -> &'static str {

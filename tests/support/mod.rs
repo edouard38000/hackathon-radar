@@ -22,6 +22,7 @@ use hackathon_radar::http::{HttpGet, HttpPost, PostRequest};
 use hackathon_radar::matching::question;
 use hackathon_radar::profile::{Eligibility, Profile};
 use hackathon_radar::run::{self, RunDeps, RunOptions, RunOutcome};
+use hackathon_radar::secrets::{Keychain, Secrets, Unavailable};
 use hackathon_radar::sources::Source;
 use hackathon_radar::sources::hackathon_be::{self, HackathonBe};
 use hackathon_radar::store::Store;
@@ -738,3 +739,66 @@ impl Harness {
 
 pub const DRY_RUN: RunOptions = RunOptions { dry_run: true };
 pub const LIVE_RUN: RunOptions = RunOptions { dry_run: false };
+
+/// A keychain held in memory, standing in for the macOS Keychain or the
+/// Secret Service so no test touches the real one. Clones share entries, so a
+/// test keeps one to look inside. While `unavailable` is set, it fails like a
+/// headless Linux machine with no keychain.
+#[derive(Clone, Default)]
+pub struct FakeKeychain {
+    pub entries: std::rc::Rc<RefCell<std::collections::BTreeMap<String, String>>>,
+    pub unavailable: bool,
+}
+
+impl FakeKeychain {
+    pub fn unavailable() -> Self {
+        Self {
+            unavailable: true,
+            ..Self::default()
+        }
+    }
+
+    pub fn with(self, account: &str, value: &str) -> Self {
+        self.entries
+            .borrow_mut()
+            .insert(account.to_owned(), value.to_owned());
+        self
+    }
+
+    pub fn get(&self, account: &str) -> Option<String> {
+        self.entries.borrow().get(account).cloned()
+    }
+}
+
+impl Keychain for FakeKeychain {
+    fn get(&self, account: &str) -> Result<Option<String>, Unavailable> {
+        if self.unavailable {
+            return Err(Unavailable("no keychain on this machine".into()));
+        }
+        Ok(self.entries.borrow().get(account).cloned())
+    }
+
+    fn set(&self, account: &str, value: &str) -> Result<(), Unavailable> {
+        if self.unavailable {
+            return Err(Unavailable("no keychain on this machine".into()));
+        }
+        self.entries
+            .borrow_mut()
+            .insert(account.to_owned(), value.to_owned());
+        Ok(())
+    }
+}
+
+/// A secret store over this keychain, an owner-only file in `dir`, and these
+/// environment variables instead of the process's own.
+pub fn secrets_in(keychain: &FakeKeychain, dir: &Path, env: &[(&str, &str)]) -> Secrets {
+    let env: Vec<(String, String)> = env
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+    Secrets::new(
+        Box::new(keychain.clone()),
+        dir.join("secrets.toml"),
+        Box::new(move |name| env.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone())),
+    )
+}
