@@ -10,7 +10,9 @@ use chrono::NaiveDate;
 use tempfile::TempDir;
 
 use hackathon_radar::agent::travel::TRAVEL_SCHEMA;
-use hackathon_radar::agent::{Agent, JudgeRequest, Judgement, TravelFunded};
+use hackathon_radar::agent::{
+    Agent, ApplicationStatus, JudgeRequest, Judgement, RECHECK_NOTE, TravelFunded,
+};
 use hackathon_radar::alert::{Alert, AlertChannel};
 use hackathon_radar::candidate::Candidate;
 use hackathon_radar::clock::Clock;
@@ -191,6 +193,12 @@ pub struct FakeAgent {
     pub same_hackathon: Vec<(String, String, bool)>,
     /// The names of the listing pairs asked about, one list per question.
     pub pairs_asked: RefCell<Vec<Vec<(String, String)>>>,
+    /// The names of the known Hackathons sent for a recheck, one list per
+    /// request. Rechecks are answered like judging (from `verdicts`) but not
+    /// counted in `asked`.
+    pub rechecked: RefCell<Vec<Vec<String>>>,
+    /// When set, rechecks fail with this error while judging still works.
+    pub recheck_fails_with: Option<String>,
 }
 
 impl FakeAgent {
@@ -208,7 +216,19 @@ impl FakeAgent {
             travel_asked: RefCell::new(Vec::new()),
             same_hackathon: Vec::new(),
             pairs_asked: RefCell::new(Vec::new()),
+            rechecked: RefCell::new(Vec::new()),
+            recheck_fails_with: None,
         }
+    }
+
+    /// Replaces the verdict for `name`, as when its page changes between Runs.
+    pub fn set_verdict(&mut self, name: &str, judgement: Judgement) {
+        self.verdicts.retain(|(n, _)| n != name);
+        self.verdicts.push((name.to_owned(), judgement));
+    }
+
+    pub fn recheck_requests(&self) -> usize {
+        self.rechecked.borrow().len()
     }
 
     /// Answers that these two listings are, or aren't, the same Hackathon.
@@ -345,7 +365,14 @@ impl Agent for FakeAgent {
             .iter()
             .map(|c| c.candidate.name.clone())
             .collect();
-        self.asked.borrow_mut().push(names);
+        if request.prompt.contains(RECHECK_NOTE) {
+            self.rechecked.borrow_mut().push(names);
+            if let Some(error) = &self.recheck_fails_with {
+                anyhow::bail!("{error}");
+            }
+        } else {
+            self.asked.borrow_mut().push(names);
+        }
         self.eligibility
             .borrow_mut()
             .push(request.eligibility.clone());
@@ -370,6 +397,8 @@ impl Agent for FakeAgent {
                             "eligibility_restriction": j.eligibility_restriction,
                             "travel_funded": j.travel_funded,
                             "travel_detail": j.travel_detail,
+                            "application_deadline": j.deadline.map(|d| d.to_string()),
+                            "application_status": j.status,
                             "reason": j.reason,
                         })
                     })
@@ -388,7 +417,18 @@ pub fn hackathon() -> Judgement {
         eligibility_restriction: None,
         travel_funded: TravelFunded::None,
         travel_detail: None,
+        deadline: None,
+        status: ApplicationStatus::Unknown,
         reason: "Teams build software over a weekend.".into(),
+    }
+}
+
+/// A Hackathon the person is eligible for, open for applications until `deadline`.
+pub fn open_until(deadline: NaiveDate) -> Judgement {
+    Judgement {
+        deadline: Some(deadline),
+        status: ApplicationStatus::Open,
+        ..hackathon()
     }
 }
 

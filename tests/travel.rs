@@ -78,7 +78,7 @@ fn a_trip_within_the_train_limit_goes_by_train() {
     assert_eq!(
         alert_text(&outcome),
         "hackathon-radar: welcome! 1 Hackathon already fits you\n\n\
-         Paris Hack\nParis, 5–6 Dec 2026 · train ~1h30"
+         Paris Hack\nParis, 5–6 Dec 2026 · train ~1h30\nStatus unknown · deadline unknown"
     );
 }
 
@@ -94,7 +94,8 @@ fn a_trip_over_the_train_limit_becomes_a_flight_and_stays_in_scope() {
     assert_eq!(trip.airport.as_deref(), Some("MUC"));
     assert_eq!(trip.train_minutes, Some(384));
     assert!(
-        alert_text(&outcome).ends_with("Munich, 5–6 Dec 2026 · fly BRU→MUC"),
+        alert_text(&outcome)
+            .ends_with("Munich, 5–6 Dec 2026 · fly BRU→MUC\nStatus unknown · deadline unknown"),
         "{}",
         alert_text(&outcome)
     );
@@ -250,7 +251,8 @@ fn a_malformed_answer_is_rejected_and_its_cities_are_asked_again() {
     assert_eq!(harness.trip_label("Paris Hack"), None);
     assert_eq!(
         alert_text(&first),
-        "hackathon-radar: welcome! 1 Hackathon already fits you\n\nParis Hack\nParis, 5–6 Dec 2026"
+        "hackathon-radar: welcome! 1 Hackathon already fits you\n\n\
+         Paris Hack\nParis, 5–6 Dec 2026\nStatus unknown · deadline unknown"
     );
 
     harness.agent.travel_raw = None;

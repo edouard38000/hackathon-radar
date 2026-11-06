@@ -6,12 +6,14 @@ use anyhow::Context;
 use chrono::NaiveDate;
 use rusqlite::{Connection, params};
 
-use crate::agent::{INSTRUCTIONS_VERSION, Judgement, TravelFunded};
+use crate::agent::{ApplicationStatus, INSTRUCTIONS_VERSION, Judgement, TravelFunded};
 use crate::candidate::Candidate;
 
+mod deadlines;
 mod runs;
 mod travel;
 
+pub use deadlines::{JudgementChange, NewlyFunded};
 pub use runs::{FailedStreak, RunCounts, RunRecord};
 
 /// Applied in order; `PRAGMA user_version` records how many have run.
@@ -146,6 +148,40 @@ const MIGRATIONS: &[&str] = &[
         failed_sources INTEGER NOT NULL,
         attention_sent INTEGER NOT NULL CHECK (attention_sent IN (0, 1)),
         CHECK ((succeeded = 1) = (failure IS NULL))
+    );",
+    // Deadlines and status (ticket 09): the Agent's latest application deadline
+    // (NULL when none is given) and status, kept with its judgement; every change
+    // a recheck or a passed deadline makes to them or to Travel-funded status;
+    // the Deadline reminders sent, one per Hackathon and deadline; and the known
+    // Hackathons that became Travel-funded, with the day an Alert announced it.
+    // Reminders and newly Travel-funded are tracked apart from announced_on.
+    "ALTER TABLE judgements ADD COLUMN application_deadline TEXT;
+    ALTER TABLE judgements ADD COLUMN application_status TEXT NOT NULL DEFAULT 'unknown'
+        CHECK (application_status IN
+            ('open', 'open_until_full', 'not_open_yet', 'waitlist', 'closed', 'unknown'));
+    CREATE TABLE judgement_changes (
+        source      TEXT NOT NULL,
+        source_key  TEXT NOT NULL,
+        changed_on  TEXT NOT NULL,
+        field       TEXT NOT NULL
+            CHECK (field IN ('application_deadline', 'application_status', 'travel_funded')),
+        old_value   TEXT,
+        new_value   TEXT
+    );
+    CREATE INDEX judgement_changes_by_listing ON judgement_changes (source, source_key);
+    CREATE TABLE deadline_reminders (
+        source       TEXT NOT NULL,
+        source_key   TEXT NOT NULL,
+        deadline     TEXT NOT NULL,
+        reminded_on  TEXT NOT NULL,
+        PRIMARY KEY (source, source_key, deadline)
+    );
+    CREATE TABLE newly_funded (
+        source        TEXT NOT NULL,
+        source_key    TEXT NOT NULL,
+        funded_on     TEXT NOT NULL,
+        announced_on  TEXT,
+        PRIMARY KEY (source, source_key)
     );",
 ];
 
@@ -362,24 +398,26 @@ impl Store {
         Ok(fresh)
     }
 
-    /// Marks each stored Hackathon as Announced on `day`, keeping the day of an earlier Alert.
+    /// Marks each stored Hackathon as Announced on `day`, keeping the day of an
+    /// earlier Alert, and returns how many were newly Announced.
     pub fn mark_announced(
         &mut self,
         hackathons: &[Candidate],
         day: NaiveDate,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<usize> {
         let tx = self.conn.transaction()?;
+        let mut newly = 0;
         {
             let mut mark = tx.prepare(
                 "UPDATE hackathons SET announced_on = ?3
                  WHERE source = ?1 AND source_key = ?2 AND announced_on IS NULL",
             )?;
             for c in hackathons {
-                mark.execute(params![c.source, c.source_key, day])?;
+                newly += mark.execute(params![c.source, c.source_key, day])?;
             }
         }
         tx.commit()?;
-        Ok(())
+        Ok(newly)
     }
 
     /// Stores the Agent's judgements, replacing any earlier one of the same listing.
@@ -390,30 +428,7 @@ impl Store {
         judged_on: NaiveDate,
     ) -> anyhow::Result<()> {
         let tx = self.conn.transaction()?;
-        {
-            let mut upsert = tx.prepare(
-                "INSERT OR REPLACE INTO judgements
-                    (source, source_key, name, is_hackathon, eligible, eligibility_restriction,
-                     travel_funded, travel_detail, reason, agent, instructions_version, judged_on)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-            )?;
-            for (c, j) in judged {
-                upsert.execute(params![
-                    c.source,
-                    c.source_key,
-                    c.name,
-                    j.is_hackathon,
-                    j.eligible,
-                    j.eligibility_restriction,
-                    j.travel_funded.as_str(),
-                    j.travel_detail,
-                    j.reason,
-                    agent,
-                    INSTRUCTIONS_VERSION,
-                    judged_on,
-                ])?;
-            }
-        }
+        upsert_judgements(&tx, agent, judged, judged_on)?;
         tx.commit()?;
         Ok(())
     }
@@ -422,7 +437,7 @@ impl Store {
     pub fn judgement(&self, source: &str, source_key: &str) -> anyhow::Result<Option<Judgement>> {
         let mut query = self.conn.prepare_cached(
             "SELECT is_hackathon, eligible, eligibility_restriction, travel_funded, travel_detail,
-                    reason
+                    reason, application_deadline, application_status
              FROM judgements WHERE source = ?1 AND source_key = ?2",
         )?;
         let mut rows =
@@ -434,19 +449,20 @@ impl Store {
     pub fn judgements(&self) -> anyhow::Result<Vec<StoredJudgement>> {
         let mut query = self.conn.prepare(
             "SELECT is_hackathon, eligible, eligibility_restriction, travel_funded, travel_detail,
-                    reason, source, source_key, name, agent, instructions_version, judged_on
+                    reason, application_deadline, application_status,
+                    source, source_key, name, agent, instructions_version, judged_on
              FROM judgements
              ORDER BY name, source, source_key",
         )?;
         let rows = query.query_map([], |row| {
             Ok(StoredJudgement {
                 judgement: judgement_from(row, 0)?,
-                source: row.get(6)?,
-                source_key: row.get(7)?,
-                name: row.get(8)?,
-                agent: row.get(9)?,
-                instructions_version: row.get(10)?,
-                judged_on: row.get(11)?,
+                source: row.get(8)?,
+                source_key: row.get(9)?,
+                name: row.get(10)?,
+                agent: row.get(11)?,
+                instructions_version: row.get(12)?,
+                judged_on: row.get(13)?,
             })
         })?;
         Ok(rows.collect::<Result<_, _>>()?)
@@ -685,12 +701,15 @@ impl Store {
         tx.execute(
             "INSERT OR IGNORE INTO judgements
                 (source, source_key, name, is_hackathon, eligible, eligibility_restriction,
-                 travel_funded, travel_detail, reason, agent, instructions_version, judged_on)
+                 travel_funded, travel_detail, reason, agent, instructions_version, judged_on,
+                 application_deadline, application_status)
              SELECT ?3, ?4, name, is_hackathon, eligible, eligibility_restriction,
-                    travel_funded, travel_detail, reason, agent, instructions_version, judged_on
+                    travel_funded, travel_detail, reason, agent, instructions_version, judged_on,
+                    application_deadline, application_status
              FROM judgements WHERE source = ?1 AND source_key = ?2",
             params![from.0, from.1, into.0, into.1],
         )?;
+        deadlines::merge(&tx, from, into)?;
         tx.execute(
             "INSERT OR IGNORE INTO trips
                 (source, source_key, kind, train_minutes, airport, label)
@@ -779,16 +798,58 @@ fn candidate_from(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<Can
     })
 }
 
-/// Reads the six judgement columns starting at `first`.
+/// Stores judgements, replacing any earlier one of the same listing.
+fn upsert_judgements(
+    tx: &rusqlite::Transaction<'_>,
+    agent: &str,
+    judged: &[(&Candidate, Judgement)],
+    judged_on: NaiveDate,
+) -> anyhow::Result<()> {
+    let mut upsert = tx.prepare(
+        "INSERT OR REPLACE INTO judgements
+            (source, source_key, name, is_hackathon, eligible, eligibility_restriction,
+             travel_funded, travel_detail, reason, agent, instructions_version, judged_on,
+             application_deadline, application_status)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+    )?;
+    for (c, j) in judged {
+        upsert.execute(params![
+            c.source,
+            c.source_key,
+            c.name,
+            j.is_hackathon,
+            j.eligible,
+            j.eligibility_restriction,
+            j.travel_funded.as_str(),
+            j.travel_detail,
+            j.reason,
+            agent,
+            INSTRUCTIONS_VERSION,
+            judged_on,
+            j.deadline,
+            j.status.as_str(),
+        ])?;
+    }
+    Ok(())
+}
+
+/// Reads the eight judgement columns starting at `first`: is_hackathon,
+/// eligible, eligibility_restriction, travel_funded, travel_detail, reason,
+/// application_deadline and application_status.
 fn judgement_from(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<Judgement> {
-    let travel: String = row.get(first + 3)?;
-    let travel_funded = TravelFunded::parse(&travel).ok_or_else(|| {
+    let unknown = |column: usize, what: &str, value: &str| {
         rusqlite::Error::FromSqlConversionFailure(
-            first + 3,
+            column,
             rusqlite::types::Type::Text,
-            format!("unknown travel_funded value {travel:?}").into(),
+            format!("unknown {what} value {value:?}").into(),
         )
-    })?;
+    };
+    let travel: String = row.get(first + 3)?;
+    let travel_funded =
+        TravelFunded::parse(&travel).ok_or_else(|| unknown(first + 3, "travel_funded", &travel))?;
+    let status: String = row.get(first + 7)?;
+    let status = ApplicationStatus::parse(&status)
+        .ok_or_else(|| unknown(first + 7, "application_status", &status))?;
     Ok(Judgement {
         is_hackathon: row.get(first)?,
         eligible: row.get(first + 1)?,
@@ -796,6 +857,8 @@ fn judgement_from(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<Jud
         travel_funded,
         travel_detail: row.get(first + 4)?,
         reason: row.get(first + 5)?,
+        deadline: row.get(first + 6)?,
+        status,
     })
 }
 
@@ -929,6 +992,8 @@ mod tests {
             eligibility_restriction: None,
             travel_funded: TravelFunded::None,
             travel_detail: None,
+            deadline: NaiveDate::from_ymd_opt(2026, 11, 20),
+            status: ApplicationStatus::Open,
             reason: "Builds.".into(),
         };
         store

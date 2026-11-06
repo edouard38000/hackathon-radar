@@ -49,7 +49,8 @@ pub fn judge(
             waiting.push(c.clone());
         }
     }
-    waiting.sort_by(|a, b| (a.start, &a.name).cmp(&(b.start, &b.name)));
+    // Those in Countries go first: one outside only Fits if it is Travel-funded.
+    waiting.sort_by_key(|c| (!rules::in_countries(c, profile), c.start, c.name.clone()));
     store.queue_unjudged(&waiting, today)?;
 
     let batch = &waiting[..waiting.len().min(MAX_CANDIDATES_PER_RUN)];
@@ -79,7 +80,7 @@ pub fn judge(
     for c in considered {
         if store
             .judgement(&c.source, &c.source_key)?
-            .is_some_and(|j| j.fits())
+            .is_some_and(|j| rules::fits(&c, &j, profile, today))
         {
             fitting.push(c);
         }

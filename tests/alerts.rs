@@ -81,26 +81,32 @@ fn the_welcome_alert_lists_6_soonest_first_and_announces_the_rest_too() {
 
 H1
 Ghent, 1 Dec 2026
+Status unknown · deadline unknown
 https://example.org/H1
 
 H2
 Ghent, 2 Dec 2026
+Status unknown · deadline unknown
 https://example.org/H2
 
 H3
 Ghent, 3 Dec 2026
+Status unknown · deadline unknown
 https://example.org/H3
 
 H4
 Ghent, 4 Dec 2026
+Status unknown · deadline unknown
 https://example.org/H4
 
 H5
 Ghent, 5 Dec 2026
+Status unknown · deadline unknown
 https://example.org/H5
 
 H6
 Ghent, 6 Dec 2026
+Status unknown · deadline unknown
 https://example.org/H6
 
 + 2 more"]
@@ -134,6 +140,7 @@ fn later_alerts_only_cover_hackathons_that_newly_fit() {
 
 New Hack
 Ghent, 3 Dec 2026
+Status unknown · deadline unknown
 https://example.org/New-Hack"
     );
     assert_eq!(
@@ -203,10 +210,12 @@ fn a_backlog_of_new_hackathons_drains_6_per_run_and_none_is_lost() {
 
 N7
 Ghent, 8 Dec 2026
+Status unknown · deadline unknown
 https://example.org/N7
 
 N8
 Ghent, 9 Dec 2026
+Status unknown · deadline unknown
 https://example.org/N8"
     );
     assert_eq!(harness.announced_names(), names);

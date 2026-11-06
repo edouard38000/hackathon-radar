@@ -6,6 +6,7 @@
 //! ```toml
 //! [travel]
 //! train_limit_hours = 4
+//! travel_funded_anywhere = true
 //!
 //! [[travel.overrides]]
 //! city = "Munich"
@@ -28,6 +29,11 @@ pub struct TravelSettings {
     pub train_limit_minutes: u32,
     /// The person's corrections, which always win over the Agent's estimates.
     pub overrides: Vec<TravelOverride>,
+    /// The Travel-funded rule: whether a Travel-funded Hackathon counts
+    /// anywhere in the world, regardless of Countries. Off unless the Profile
+    /// sets `travel_funded_anywhere = true`, because it sends listings from
+    /// every country to the Agent.
+    pub travel_funded_anywhere: bool,
 }
 
 impl Default for TravelSettings {
@@ -35,6 +41,7 @@ impl Default for TravelSettings {
         Self {
             train_limit_minutes: DEFAULT_TRAIN_LIMIT_MINUTES,
             overrides: Vec::new(),
+            travel_funded_anywhere: false,
         }
     }
 }
@@ -73,6 +80,8 @@ pub(super) struct TravelFile {
     train_limit_hours: Option<f64>,
     #[serde(default)]
     overrides: Vec<OverrideFile>,
+    #[serde(default)]
+    travel_funded_anywhere: bool,
 }
 
 #[derive(Deserialize)]
@@ -161,6 +170,7 @@ impl TravelSettings {
         TravelSettings {
             train_limit_minutes,
             overrides,
+            travel_funded_anywhere: file.travel_funded_anywhere,
         }
     }
 }

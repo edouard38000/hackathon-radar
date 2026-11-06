@@ -6,6 +6,7 @@ use crate::agent::Agent;
 use crate::alert::{self, Alert, AlertChannel, AlertKind, attention};
 use crate::candidate::Candidate;
 use crate::clock::Clock;
+use crate::deadlines;
 use crate::judging;
 use crate::matching;
 use crate::profile::Profile;
@@ -70,6 +71,10 @@ pub struct RunOutcome {
     pub duplicates: usize,
     /// How many Hackathons wait for the Agent to say whether two listings are the same one.
     pub waiting_on_duplicates: usize,
+    /// How many known Hackathons the Agent rechecked for deadline, status and travel funding.
+    pub rechecked: usize,
+    /// Why the Agent's recheck failed this Run, if it did; those Hackathons are due again.
+    pub recheck_failure: Option<String>,
 }
 
 #[derive(Debug)]
@@ -135,17 +140,28 @@ fn run_steps(
         judged.failure.is_none(),
     )?;
 
+    // Deadlines, status and travel funding of known Hackathons; passed deadlines
+    // close even when the Agent failed.
+    let rechecked = deadlines::recheck(
+        deps.agent,
+        deps.profile,
+        deps.store,
+        today,
+        judged.failure.is_none(),
+    )?;
+    let fitting = deadlines::still_fitting(deps.store, deps.profile, fitting, today)?;
+
     // Until something has been Announced, the Alert is the Welcome Alert; either
-    // way it only covers what no Alert has announced yet.
+    // way it only covers what no Alert has announced yet, plus Deadline
+    // reminders and newly Travel-funded Hackathons decided from the store.
     let kind = if deps.store.has_announced_anything()? {
         AlertKind::New
     } else {
         AlertKind::Welcome
     };
     let not_announced = deps.store.not_announced(&fitting)?;
-    let composed = alert::compose_with_trips(&not_announced, kind, |h| {
-        travelled.trip(h).map(|t| t.label.clone())
-    });
+    let entries = deadlines::entries(deps.store, deps.profile, &not_announced, today)?;
+    let composed = alert::compose_entries(entries, kind);
 
     // Whatever failed above, the Alert is composed from what's stored and sent;
     // a failing Run may add the "needs attention" part to it.
@@ -169,8 +185,10 @@ fn run_steps(
                 sent = true;
                 if deps.channel.reaches_the_person() {
                     if let Some(composed) = &composed {
-                        deps.store.mark_announced(&composed.announces, today)?;
-                        announced = composed.announces.len();
+                        announced = deps.store.mark_announced(&composed.announces, today)?;
+                        deps.store.mark_reminded(&composed.reminds, today)?;
+                        deps.store
+                            .mark_funding_announced(&composed.announces_funding, today)?;
                     }
                     attention_sent = attention.is_some();
                 }
@@ -197,6 +215,8 @@ fn run_steps(
         travel_failure: travelled.failure,
         duplicates: merged.duplicates,
         waiting_on_duplicates: merged.waiting,
+        rechecked: rechecked.rechecked,
+        recheck_failure: rechecked.failure,
     };
     if !options.dry_run {
         deps.store.record_run(&RunRecord {

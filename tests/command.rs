@@ -105,7 +105,9 @@ fn approving_answer(count: usize) -> String {
             serde_json::json!({
                 "id": id, "is_hackathon": true, "eligible": true,
                 "eligibility_restriction": null, "travel_funded": "full",
-                "travel_detail": "Flights and two hotel nights", "reason": "A 24-hour build event.",
+                "travel_detail": "Flights and two hotel nights",
+                "application_deadline": null, "application_status": "open",
+                "reason": "A 24-hour build event.",
             })
         })
         .collect();

@@ -1,6 +1,7 @@
 //! The Agent: the person's own coding agent, run headless, which judges what the
 //! data-only rules can't (ADR 0002): whether a Candidate is really a Hackathon,
-//! whether the person meets its Eligibility, and whether it is Travel-funded.
+//! whether the person meets its Eligibility, whether it is Travel-funded, and
+//! its application deadline and status.
 //!
 //! Every Agent sits behind [`Agent`]: it gets the prompt and the JSON schema and
 //! returns JSON text. The engine, not the Agent, checks that text against the
@@ -18,6 +19,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::Context;
+use chrono::NaiveDate;
 use serde::{Deserialize, Deserializer, Serialize};
 use tempfile::TempDir;
 
@@ -26,8 +28,14 @@ use crate::process::{Output, SystemRunner};
 use crate::profile::{AgentAdapter, AgentSettings, Eligibility, Profile};
 
 /// The instructions every Agent runs with. `{{eligibility}}` and `{{candidates}}`
-/// are filled in for each request.
+/// are filled in for each request, and `{{recheck}}` with [`RECHECK_NOTE`] when
+/// the request rechecks known Hackathons, or with nothing.
 pub const PROMPT_TEMPLATE: &str = include_str!("prompt.md");
+
+/// What a recheck request adds to the prompt: its Candidates were judged before.
+pub const RECHECK_NOTE: &str = "## Rechecking\n\n\
+Every Candidate below was judged on an earlier Run. Judge it again from its current page: \
+deadlines move, applications open and close, and organisers add travel funding.\n\n";
 
 /// The JSON schema an Agent's answer must match.
 pub const SCHEMA: &str = include_str!("judgements.schema.json");
@@ -146,6 +154,22 @@ pub struct SentCandidate<'a> {
 impl<'a> JudgeRequest<'a> {
     /// `ids` must hold one id per Candidate; [`numbered_ids`] makes them.
     pub fn new(candidates: &'a [Candidate], ids: &'a [String], profile: &'a Profile) -> Self {
+        Self::with_note(candidates, ids, profile, "")
+    }
+
+    /// The same request, prompt and schema as [`JudgeRequest::new`], about
+    /// known Hackathons judged on an earlier Run, so their deadline, status and
+    /// Travel-funded status stay current. The prompt says they are rechecks.
+    pub fn recheck(candidates: &'a [Candidate], ids: &'a [String], profile: &'a Profile) -> Self {
+        Self::with_note(candidates, ids, profile, RECHECK_NOTE)
+    }
+
+    fn with_note(
+        candidates: &'a [Candidate],
+        ids: &'a [String],
+        profile: &'a Profile,
+        note: &str,
+    ) -> Self {
         assert_eq!(candidates.len(), ids.len(), "one id per Candidate");
         let candidates: Vec<SentCandidate<'a>> = ids
             .iter()
@@ -153,6 +177,7 @@ impl<'a> JudgeRequest<'a> {
             .map(|(id, candidate)| SentCandidate { id, candidate })
             .collect();
         let prompt = PROMPT_TEMPLATE
+            .replace("{{recheck}}", note)
             .replace("{{eligibility}}", &eligibility_facts(profile))
             .replace("{{candidates}}", &candidates_json(&candidates));
         Self {
@@ -192,6 +217,17 @@ impl<'a> JudgeRequest<'a> {
                     item.id
                 )));
             }
+            let deadline = match non_empty(item.application_deadline) {
+                None => None,
+                Some(text) => Some(NaiveDate::parse_from_str(&text, "%Y-%m-%d").map_err(
+                    |_| {
+                        InvalidOutput(format!(
+                            "the judgement of {:?} has the deadline {text:?}, which is not a YYYY-MM-DD date",
+                            item.id
+                        ))
+                    },
+                )?),
+            };
             judged.push((
                 sent.candidate,
                 Judgement {
@@ -200,6 +236,8 @@ impl<'a> JudgeRequest<'a> {
                     eligibility_restriction: non_empty(item.eligibility_restriction),
                     travel_funded: item.travel_funded,
                     travel_detail: non_empty(item.travel_detail),
+                    deadline,
+                    status: item.application_status,
                     reason: item.reason.trim().to_owned(),
                 },
             ));
@@ -225,6 +263,10 @@ pub struct Judgement {
     pub travel_funded: TravelFunded,
     /// What is covered and for whom.
     pub travel_detail: Option<String>,
+    /// The last day to apply, if the organiser gives one.
+    pub deadline: Option<NaiveDate>,
+    /// Whether applications are open, as the Agent found them.
+    pub status: ApplicationStatus,
     pub reason: String,
 }
 
@@ -232,6 +274,75 @@ impl Judgement {
     /// What the Agent decides for Fit: a Hackathon the person is eligible for.
     pub fn fits(&self) -> bool {
         self.is_hackathon && self.eligible
+    }
+
+    /// The application status on `today`: a passed deadline means closed.
+    pub fn status_on(&self, today: NaiveDate) -> ApplicationStatus {
+        match self.deadline {
+            Some(deadline) if deadline < today => ApplicationStatus::Closed,
+            _ => self.status,
+        }
+    }
+}
+
+/// Whether a Hackathon takes applications.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApplicationStatus {
+    Open,
+    /// Open, but places go to the first who apply.
+    OpenUntilFull,
+    NotOpenYet,
+    /// Full; new applicants join a waiting list.
+    Waitlist,
+    Closed,
+    Unknown,
+}
+
+impl ApplicationStatus {
+    pub const ALL: [ApplicationStatus; 6] = [
+        ApplicationStatus::Open,
+        ApplicationStatus::OpenUntilFull,
+        ApplicationStatus::NotOpenYet,
+        ApplicationStatus::Waitlist,
+        ApplicationStatus::Closed,
+        ApplicationStatus::Unknown,
+    ];
+
+    /// As the schema and the store write it, such as `open_until_full`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ApplicationStatus::Open => "open",
+            ApplicationStatus::OpenUntilFull => "open_until_full",
+            ApplicationStatus::NotOpenYet => "not_open_yet",
+            ApplicationStatus::Waitlist => "waitlist",
+            ApplicationStatus::Closed => "closed",
+            ApplicationStatus::Unknown => "unknown",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.as_str() == text)
+    }
+
+    /// As an Alert entry shows it, such as `Open until full`.
+    pub fn label(self) -> &'static str {
+        match self {
+            ApplicationStatus::Open => "Open",
+            ApplicationStatus::OpenUntilFull => "Open until full",
+            ApplicationStatus::NotOpenYet => "Not open yet",
+            ApplicationStatus::Waitlist => "Waitlist",
+            ApplicationStatus::Closed => "Closed",
+            ApplicationStatus::Unknown => "Status unknown",
+        }
+    }
+
+    /// Whether the person can apply now: the statuses a Deadline reminder is for.
+    pub fn is_open(self) -> bool {
+        matches!(
+            self,
+            ApplicationStatus::Open | ApplicationStatus::OpenUntilFull
+        )
     }
 }
 
@@ -287,6 +398,9 @@ struct AnswerItem {
     travel_funded: TravelFunded,
     #[serde(deserialize_with = "present")]
     travel_detail: Option<String>,
+    #[serde(deserialize_with = "present")]
+    application_deadline: Option<String>,
+    application_status: ApplicationStatus,
     reason: String,
 }
 
@@ -388,7 +502,9 @@ mod tests {
     const ITEM: &str = r#"{
         "id": "1", "is_hackathon": true, "eligible": true,
         "eligibility_restriction": null, "travel_funded": "partial",
-        "travel_detail": "Up to €150 for train tickets", "reason": "A 48-hour build event."
+        "travel_detail": "Up to €150 for train tickets",
+        "application_deadline": "2026-11-28", "application_status": "open_until_full",
+        "reason": "A 48-hour build event."
     }"#;
 
     fn answer(items: &[&str]) -> String {
@@ -419,6 +535,8 @@ mod tests {
             "eligibility_restriction",
             "travel_funded",
             "travel_detail",
+            "application_deadline",
+            "application_status",
             "reason",
         ];
         assert_eq!(required, expected);
@@ -432,6 +550,80 @@ mod tests {
             item["properties"]["travel_funded"]["enum"],
             serde_json::json!(["none", "partial", "full"])
         );
+    }
+
+    #[test]
+    fn the_deadline_is_required_but_nullable_and_the_status_is_one_of_six() {
+        let schema: Value = serde_json::from_str(SCHEMA).unwrap();
+        let properties = &schema["properties"]["judgements"]["items"]["properties"];
+        assert_eq!(
+            properties["application_deadline"]["type"],
+            serde_json::json!(["string", "null"])
+        );
+        let statuses: Vec<&str> = ApplicationStatus::ALL.iter().map(|s| s.as_str()).collect();
+        assert_eq!(
+            properties["application_status"]["enum"],
+            serde_json::json!(statuses)
+        );
+        assert_eq!(
+            statuses,
+            [
+                "open",
+                "open_until_full",
+                "not_open_yet",
+                "waitlist",
+                "closed",
+                "unknown"
+            ]
+        );
+        for status in ApplicationStatus::ALL {
+            assert_eq!(ApplicationStatus::parse(status.as_str()), Some(status));
+        }
+    }
+
+    #[test]
+    fn a_null_deadline_is_read_as_no_deadline() {
+        let candidates = [candidate("Ghent Hack")];
+        let ids = numbered_ids(1);
+        let profile = profile();
+        let request = JudgeRequest::new(&candidates, &ids, &profile);
+        let item = ITEM
+            .replace("\"2026-11-28\"", "null")
+            .replace("\"open_until_full\"", "\"unknown\"");
+        let judged = request.read_judgements(&answer(&[&item])).unwrap();
+        assert_eq!(judged[0].1.deadline, None);
+        assert_eq!(judged[0].1.status, ApplicationStatus::Unknown);
+    }
+
+    #[test]
+    fn a_passed_deadline_means_closed() {
+        let judgement = Judgement {
+            deadline: NaiveDate::from_ymd_opt(2026, 11, 28),
+            status: ApplicationStatus::Open,
+            is_hackathon: true,
+            eligible: true,
+            eligibility_restriction: None,
+            travel_funded: TravelFunded::None,
+            travel_detail: None,
+            reason: "Builds.".into(),
+        };
+        let on = |d| judgement.status_on(NaiveDate::from_ymd_opt(2026, 11, d).unwrap());
+        assert_eq!(on(28), ApplicationStatus::Open);
+        assert_eq!(on(29), ApplicationStatus::Closed);
+    }
+
+    #[test]
+    fn a_recheck_runs_the_same_prompt_and_says_it_is_a_recheck() {
+        let candidates = [candidate("Ghent Hack")];
+        let ids = numbered_ids(1);
+        let profile = profile();
+        let judging = JudgeRequest::new(&candidates, &ids, &profile);
+        let recheck = JudgeRequest::recheck(&candidates, &ids, &profile);
+        assert!(!judging.prompt.contains("## Rechecking"));
+        assert!(recheck.prompt.contains(RECHECK_NOTE), "{}", recheck.prompt);
+        assert_eq!(recheck.prompt.replace(RECHECK_NOTE, ""), judging.prompt);
+        assert_eq!(recheck.schema, SCHEMA);
+        assert_eq!(recheck.step_cap, None);
     }
 
     #[test]
@@ -476,6 +668,8 @@ mod tests {
                 eligibility_restriction: None,
                 travel_funded: TravelFunded::Partial,
                 travel_detail: Some("Up to €150 for train tickets".into()),
+                deadline: NaiveDate::from_ymd_opt(2026, 11, 28),
+                status: ApplicationStatus::OpenUntilFull,
                 reason: "A 48-hour build event.".into(),
             }
         );
@@ -510,6 +704,26 @@ mod tests {
                 with("\"id\": \"1\"", "\"id\": \"7\""),
             ),
             ("an empty reason", with("A 48-hour build event.", " ")),
+            (
+                "a missing deadline key",
+                with("\"application_deadline\": \"2026-11-28\",", ""),
+            ),
+            (
+                "a missing status key",
+                with("\"application_status\": \"open_until_full\",", ""),
+            ),
+            (
+                "an unknown application status",
+                with("\"open_until_full\"", "\"maybe\""),
+            ),
+            (
+                "a deadline that isn't a date",
+                with("\"2026-11-28\"", "\"next Friday\""),
+            ),
+            (
+                "an impossible date",
+                with("\"2026-11-28\"", "\"2026-02-30\""),
+            ),
             ("the same id twice", answer(&[ITEM, ITEM])),
         ];
         for (what, answer) in &bad {

@@ -9,8 +9,13 @@ use serde::Deserialize;
 
 use crate::agent::command::CommandTemplate;
 
+mod deadlines;
 mod travel;
 
+pub use deadlines::{
+    DEFAULT_RECHECK_EVERY_DAYS, DEFAULT_RECHECK_HORIZON_DAYS, DEFAULT_RECHECKS_PER_RUN,
+    DEFAULT_REMINDER_DAYS, DeadlineSettings,
+};
 pub use travel::{DEFAULT_TRAIN_LIMIT_MINUTES, FlightOverride, TravelOverride, TravelSettings};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +33,8 @@ pub struct Profile {
     pub travel: TravelSettings,
     /// Extra Sources and how much the built-in ones fetch.
     pub sources: SourceSettings,
+    /// Deadline reminders and rechecks of known Hackathons.
+    pub deadlines: DeadlineSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -217,6 +224,8 @@ struct ProfileFile {
     travel: travel::TravelFile,
     #[serde(default)]
     sources: SourceSettings,
+    #[serde(default)]
+    deadlines: DeadlineSettings,
 }
 
 #[derive(Deserialize)]
@@ -347,6 +356,7 @@ impl Profile {
                 .push("agent.travel_max_turns is 0; the Agent needs at least one step".to_owned());
         }
         let travel = TravelSettings::from_file(file.travel, &mut problems);
+        file.deadlines.check(file.agent.max_turns, &mut problems);
 
         let mut sources = file.sources;
         sources.ics = sources.ics.iter().map(|u| u.trim().to_owned()).collect();
@@ -377,6 +387,7 @@ impl Profile {
             agent: file.agent,
             travel,
             sources,
+            deadlines: file.deadlines,
         })
     }
 
@@ -620,6 +631,7 @@ mod tests {
                 },
                 travel: TravelSettings::default(),
                 sources: SourceSettings::default(),
+                deadlines: DeadlineSettings::default(),
             }
         );
         assert!(profile.includes_country("belgium"));
