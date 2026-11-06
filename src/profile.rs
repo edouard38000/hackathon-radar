@@ -14,6 +14,7 @@ use crate::sources::packs::Pack;
 use crate::sources::places;
 
 mod deadlines;
+mod edit;
 mod fares;
 mod travel;
 
@@ -21,6 +22,7 @@ pub use deadlines::{
     DEFAULT_RECHECK_EVERY_DAYS, DEFAULT_RECHECK_HORIZON_DAYS, DEFAULT_RECHECKS_PER_RUN,
     DEFAULT_REMINDER_DAYS, DeadlineSettings,
 };
+pub use edit::ProfileDocument;
 pub use fares::FareSettings;
 pub use travel::{DEFAULT_TRAIN_LIMIT_MINUTES, FlightOverride, TravelOverride, TravelSettings};
 
@@ -32,6 +34,9 @@ pub struct Profile {
     pub countries: Vec<String>,
     /// The currency the person counts money in (the Flight budget and Fares).
     pub currency: Currency,
+    /// The Themes the person wants Hackathons about, such as `AI agents` or
+    /// `climate`, as written. Empty when they gave none.
+    pub themes: Vec<String>,
     /// Where Alerts go. Without one, Alerts are printed instead of sent.
     pub alert_channel: Option<AlertChannelSetting>,
     /// When scheduled Runs happen.
@@ -254,6 +259,8 @@ struct ProfileFile {
     home: HomeFile,
     countries: Vec<String>,
     currency: Option<String>,
+    #[serde(default)]
+    themes: Vec<String>,
     alert_channel: Option<AlertChannelFile>,
     #[serde(default)]
     schedule: ScheduleFile,
@@ -370,6 +377,11 @@ impl Profile {
             None => Currency::of_country(home.country_name().as_deref()),
         };
 
+        let themes: Vec<String> = file.themes.iter().map(|t| t.trim().to_owned()).collect();
+        if themes.iter().any(String::is_empty) {
+            problems.push("themes has an empty entry".to_owned());
+        }
+
         let alert_channel = file
             .alert_channel
             .and_then(|channel| alert_channel(channel, &mut problems));
@@ -441,6 +453,7 @@ impl Profile {
             home,
             countries,
             currency,
+            themes,
             alert_channel,
             schedule,
             eligibility,
@@ -507,7 +520,7 @@ fn photon(file: AlertChannelFile, problems: &mut Vec<String>) -> Option<PhotonSe
 
 /// A phone number in E.164 format (`+`, then 7 to 15 digits with no leading
 /// zero), or anything else without spaces, taken as a Photon space ID.
-fn is_photon_recipient(to: &str) -> bool {
+pub fn is_photon_recipient(to: &str) -> bool {
     match to.strip_prefix('+') {
         Some(digits) => {
             (7..=15).contains(&digits.len())
@@ -532,12 +545,7 @@ fn ntfy(file: AlertChannelFile, problems: &mut Vec<String>) -> Option<NtfySettin
             "alert_channel.topic is missing; ntfy needs a topic, such as \"hackathon-radar-7f3k9q\""
                 .to_owned(),
         );
-    } else if topic.len() > 64
-        || !topic
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-    {
-        // ntfy's own rule for topic names, which also keeps the topic safe in a URL.
+    } else if !is_ntfy_topic(topic) {
         problems.push(format!(
             "alert_channel.topic: {topic:?} is not an ntfy topic; use up to 64 letters, digits, - or _"
         ));
@@ -559,6 +567,16 @@ fn ntfy(file: AlertChannelFile, problems: &mut Vec<String>) -> Option<NtfySettin
         server: server.to_owned(),
         topic: topic.to_owned(),
     })
+}
+
+/// ntfy's own rule for topic names (up to 64 letters, digits, `-` or `_`),
+/// which also keeps the topic safe in a URL.
+pub fn is_ntfy_topic(topic: &str) -> bool {
+    !topic.is_empty()
+        && topic.len() <= 64
+        && topic
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// When scheduled Runs happen: on these days, at this local time. It is read from
@@ -684,6 +702,7 @@ mod tests {
                 },
                 countries: vec!["Belgium".into(), "France".into()],
                 currency: Currency::parse("EUR").unwrap(),
+                themes: Vec::new(),
                 alert_channel: None,
                 schedule: Schedule::default(),
                 eligibility: Eligibility::default(),
@@ -1107,12 +1126,14 @@ mod tests {
         // And so are its commented-out currency and Sources.
         let uncommented = text
             .replace("# currency = ", "currency = ")
+            .replace("# themes = ", "themes = ")
             .replace("# [sources]", "[sources]")
             .replace("# packs = ", "packs = ")
             .replace("# ics = ", "ics = ")
             .replace("# hackathonhub_pages_per_run", "hackathonhub_pages_per_run");
         let profile = Profile::from_toml(&uncommented, &path).unwrap();
         assert_eq!(profile.currency.code(), "EUR");
+        assert_eq!(profile.themes, ["AI agents", "climate"]);
         assert_eq!(profile.sources.packs, [Pack::NorthAmerica]);
         assert_eq!(profile.sources.ics.len(), 1);
     }
@@ -1262,6 +1283,18 @@ mod tests {
         assert!(!countries.includes("United States", Some("TX")));
         assert!(profile.includes_country("Switzerland"));
         assert!(!profile.includes_country("United States"));
+    }
+
+    #[test]
+    fn reads_themes_and_refuses_an_empty_one() {
+        let profile = parse(&format!("themes = [\" AI agents \", \"climate\"]\n{HOME}")).unwrap();
+        assert_eq!(profile.themes, ["AI agents", "climate"]);
+        assert!(parse(HOME).unwrap().themes.is_empty());
+        let err = parse(&format!("themes = [\"climate\", \" \"]\n{HOME}")).unwrap_err();
+        assert!(
+            err.to_string().contains("themes has an empty entry"),
+            "{err}"
+        );
     }
 
     #[test]

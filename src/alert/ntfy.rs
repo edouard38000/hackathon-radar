@@ -6,17 +6,10 @@ use crate::alert::{Alert, AlertChannel};
 use crate::http::{HttpPost, PostRequest};
 use crate::profile::NtfySetting;
 
-/// Where an access token is read from, for ntfy servers that need one. The
-/// Profile never holds it, since the Profile has no secrets.
+/// The environment variable that overrides the stored access token, for ntfy
+/// servers that need one. The token is a secret, kept in the keychain
+/// ([`crate::secrets`]), never in the Profile.
 pub const TOKEN_ENV_VAR: &str = "HACKATHON_RADAR_NTFY_TOKEN";
-
-/// The access token from [`TOKEN_ENV_VAR`], if it is set and not empty.
-pub fn token_from_env() -> Option<String> {
-    std::env::var(TOKEN_ENV_VAR)
-        .ok()
-        .map(|token| token.trim().to_owned())
-        .filter(|token| !token.is_empty())
-}
 
 pub struct NtfyChannel<H> {
     setting: NtfySetting,

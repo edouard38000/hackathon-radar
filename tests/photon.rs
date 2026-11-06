@@ -180,13 +180,14 @@ fn a_number_that_has_not_texted_the_line_is_told_to() {
 }
 
 #[test]
-fn refused_credentials_say_which_variables_to_check() {
+fn refused_credentials_say_how_to_store_them_again() {
     let message = send_error(&FakeRunner::answering("bad-credentials.json"));
     assert_eq!(
         message,
-        "Photon refused your project credentials (Invalid credentials). Check PHOTON_PROJECT_ID \
-         and PHOTON_PROJECT_SECRET against your project in the Photon dashboard \
-         (https://app.photon.codes)."
+        "Photon refused your project credentials (Invalid credentials). Check your project's ID \
+         and secret in the Photon dashboard (https://app.photon.codes) and store them again with \
+         `hackathon-radar init` (or PHOTON_PROJECT_ID and PHOTON_PROJECT_SECRET, if you set them \
+         in the environment)."
     );
 }
 
@@ -272,9 +273,10 @@ fn without_credentials_nothing_runs_and_the_error_says_what_to_set() {
     assert_eq!(
         message,
         "Photon Alerts need your Photon project credentials, but PHOTON_PROJECT_SECRET is not \
-         set. Set PHOTON_PROJECT_ID and PHOTON_PROJECT_SECRET in the environment; your project's \
-         ID and secret are in the Photon dashboard (https://app.photon.codes). They never go in \
-         the Profile."
+         set. Run `hackathon-radar init` to store them in your keychain, or set \
+         PHOTON_PROJECT_ID and PHOTON_PROJECT_SECRET in the environment; your project's ID and \
+         secret are in the Photon dashboard (https://app.photon.codes). They never go in the \
+         Profile."
     );
 }
 

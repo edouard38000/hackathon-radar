@@ -11,6 +11,70 @@ A self-hosted hackathon tracker. An AI agent running on your own machine finds h
 - **Personal use only.** It reads public hackathon listings for your own tracking. Respect each source's terms of use.
 - **Rust first** wherever the platform allows.
 
+## Set up
+
+```sh
+hackathon-radar init
+```
+
+`init` walks you through everything once: your Home city (it suggests the airports near it), the Countries or regions you'll travel to, your Train limit, your Flight budget in your currency (taken from Home's country), the Travel-funded rule (on by default: a Travel-funded Hackathon then counts anywhere in the world), your Themes and Eligibility, your Agent (it looks for `claude` and `codex` on your `PATH`), an optional [SerpApi](#fares-and-the-flight-budget) key, and your Alert channel ([Photon](#photon-imessage-alerts) or ntfy), then sends a test Alert and offers to install the [schedule](#schedule). It writes a complete Profile at `~/.config/hackathon-radar/profile.toml`. Run it again to change anything: it shows your current values as defaults, changes only what you answer differently, and keeps your own comments and any section it doesn't ask about.
+
+`hackathon-radar test-alert` sends one short Alert through your Alert channel at any time and says whether it was sent.
+
+### Your keys and tokens
+
+Your Profile holds no secrets, so it is safe to share. `init` stores your keys in your operating system's keychain (the macOS Keychain, or the Secret Service on Linux) under the service `hackathon-radar`. On a machine with no keychain, such as a headless Linux server, they go to `~/.config/hackathon-radar/secrets.toml` instead, readable only by you; hackathon-radar refuses to read that file if anyone else can. Scheduled Runs read them from there, so they work without your shell's environment.
+
+| Secret | Keychain account | Environment variable |
+| --- | --- | --- |
+| Photon project ID | `photon-project-id` | `PHOTON_PROJECT_ID` |
+| Photon project secret | `photon-project-secret` | `PHOTON_PROJECT_SECRET` |
+| SerpApi key | `serpapi-api-key` | `SERPAPI_API_KEY` |
+| ntfy access token | `ntfy-token` | `HACKATHON_RADAR_NTFY_TOKEN` |
+
+Each one is read from its environment variable first, when it is set (for CI, or to try a key out), then the keychain, then the file. hackathon-radar never prints a secret. Your Anthropic key isn't one of them: Claude Code runs on your own `claude` sign-in (see [The Agent](#the-agent)).
+
+### Setting up without questions
+
+Coding agents (and scripts) drive `init` with flags: each one answers its question, and `--yes` answers every other question with its default, which is the value your Profile already has. Answers that have no default (a new Profile's Home city, for example) are listed together, and nothing is written until they're all given. Lists are comma-separated, and `none` clears an optional value.
+
+```sh
+printf '%s\n' "$SERPAPI_KEY" | hackathon-radar init --yes \
+  --home-city Brussels --countries "Belgium, France, Schengen" \
+  --flight-budget 200 --themes "AI agents, climate" \
+  --agent claude-code --serpapi-key-stdin \
+  --alert-channel ntfy --ntfy-topic hackathon-radar-k3f9q2m8x1zt
+```
+
+| Flag | Answers |
+| --- | --- |
+| `--yes` | Ask nothing; keep current values and take defaults; list what's missing |
+| `--profile <PATH>`, `--db <PATH>` | Where the Profile and the database are |
+| `--home-city <CITY>` | Home's city |
+| `--home-country <COUNTRY>` | Home's country, or `none` (default: from the city) |
+| `--airports <CODES>` | The airports you fly out of (default: the ones near Home, for the cities init knows) |
+| `--countries <LIST>` | Countries, US states or regions (default: Home's country) |
+| `--currency <CODE>` | Your currency (default: Home country's) |
+| `--train-limit <HOURS>` | The Train limit (default: 4) |
+| `--flight-budget <AMOUNT>` | The Flight budget, or `none` |
+| `--travel-funded-anywhere <true\|false>` | The Travel-funded rule (default: true for a new Profile) |
+| `--themes <LIST>` | Your Themes, or `none` |
+| `--student <true\|false\|none>`, `--nationalities <LIST>`, `--age <AGE>` | Your Eligibility |
+| `--agent <claude-code\|codex\|command>` | Your Agent (default: claude-code) |
+| `--experimental` | Opts in to the experimental Codex adapter |
+| `--agent-command <COMMAND>` | The command template for `--agent command`, split on spaces |
+| `--serpapi-key-stdin` | Reads your SerpApi key from stdin |
+| `--alert-channel <photon\|ntfy\|none>` | Your Alert channel |
+| `--photon-to <NUMBER>` | Your number for Photon, in E.164 format |
+| `--photon-credentials-stdin` | Reads your Photon project ID, then its secret, from stdin |
+| `--skip-npm-ci` | Doesn't install the Photon sidecar's dependencies |
+| `--ntfy-topic <TOPIC>`, `--ntfy-server <URL>` | Your ntfy topic and server (default: https://ntfy.sh) |
+| `--ntfy-token-stdin` | Reads an ntfy access token from stdin |
+| `--test-alert <true\|false>` | Whether to send a test Alert (default: true) |
+| `--install-schedule <true\|false>` | Whether to install the schedule (default: false with `--yes`) |
+
+Secrets never come from a flag, so they don't end up in your shell history: pipe them on stdin, one per line, in this order: the SerpApi key, the ntfy token, the Photon project ID, the Photon project secret (only those whose `--…-stdin` flag you pass). `init` exits non-zero if the test Alert or the schedule install fails, after saying why; the Profile is saved either way.
+
 ## Try it
 
 `hackathon-radar run --dry-run` reads the Sources (the global ones, [Devpost](https://devpost.com), [MLH](https://www.mlh.com), [ETHGlobal](https://ethglobal.com/events), the [CASSINI Hackathons](https://www.cassini.eu/hackathons/) and [dev.events](https://dev.events); the Source pack Home's country picks, Europe with [hackathon.be](https://hackathon.be), [hackathonhub.eu](https://hackathonhub.eu) and two Luma calendars, or North America with Luma's San Francisco, New York and Boston calendars; any packs you add; and any ICS calendars you add under `[sources]` in your Profile), merges listings of the same Hackathon from different Sources, keeps the listings that haven't ended and are in your Profile's Countries (which can name regions such as `"Schengen"`, `"European Union"`, `"North America"` or `"US West Coast"`), asks your Agent (Claude Code, Codex or another coding agent) which of them are real Hackathons you're eligible for and which are Travel-funded, stores the results in a local SQLite database, and prints the Alert it would send. A dry run sends nothing and marks nothing as Announced.
@@ -19,13 +83,13 @@ A self-hosted hackathon tracker. An AI agent running on your own machine finds h
 cargo run -- run --dry-run --profile examples/profile.toml
 ```
 
-Without `--dry-run`, the Alert goes to the Alert channel in your Profile: an iMessage from your own [Photon](#photon-imessage-alerts) line, or a push through [ntfy](https://ntfy.sh). For ntfy, which needs no account, install the ntfy app, subscribe to a hard-to-guess topic, and uncomment the `[alert_channel]` section of the example Profile with that topic. Your first Alert is a Welcome Alert listing up to 6 Hackathons that already Fit. Later Runs only tell you about Hackathons that newly Fit, each one once, about known ones that newly became Travel-funded, and give a Deadline reminder 3 days before an open Hackathon that Fits closes applications; Travel-funded ones come first, at most 6 per Alert (the rest come in the next one), and nothing is sent when nothing is new. Each entry shows the dates and city, the trip or travel funding, the application status and deadline, and the link. Each Run also has your Agent recheck the deadline, status and travel funding of a few known Hackathons (see `[deadlines]` in the example Profile). If your ntfy server needs an access token, set it in `HACKATHON_RADAR_NTFY_TOKEN`; it never goes in the Profile. With no Alert channel set, the Alert is printed instead and nothing is marked as Announced.
+Without `--dry-run`, the Alert goes to the Alert channel in your Profile: an iMessage from your own [Photon](#photon-imessage-alerts) line, or a push through [ntfy](https://ntfy.sh). For ntfy, which needs no account, install the ntfy app, subscribe to a hard-to-guess topic, and uncomment the `[alert_channel]` section of the example Profile with that topic. Your first Alert is a Welcome Alert listing up to 6 Hackathons that already Fit. Later Runs only tell you about Hackathons that newly Fit, each one once, about known ones that newly became Travel-funded, and give a Deadline reminder 3 days before an open Hackathon that Fits closes applications; Travel-funded ones come first, at most 6 per Alert (the rest come in the next one), and nothing is sent when nothing is new. Each entry shows the dates and city, the trip or travel funding, the application status and deadline, and the link. Each Run also has your Agent recheck the deadline, status and travel funding of a few known Hackathons (see `[deadlines]` in the example Profile). If your ntfy server needs an access token, `init` stores it in your keychain; it never goes in the Profile. With no Alert channel set, the Alert is printed instead and nothing is marked as Announced.
 
-Your Profile is a small TOML file with your Home, Countries, currency and Alert channel; see [`examples/profile.toml`](examples/profile.toml). By default it is read from `~/.config/hackathon-radar/profile.toml` and the database lives at `~/.local/share/hackathon-radar/hackathon-radar.sqlite` (both honour `XDG_CONFIG_HOME` and `XDG_DATA_HOME`). Pass `--profile` and `--db` to use other paths.
+Your Profile is a small TOML file with your Home, Countries, currency, Themes, Eligibility, Agent and Alert channel, which `init` writes for you; see [`examples/profile.toml`](examples/profile.toml) for every setting. By default it is read from `~/.config/hackathon-radar/profile.toml` and the database lives at `~/.local/share/hackathon-radar/hackathon-radar.sqlite` (both honour `XDG_CONFIG_HOME` and `XDG_DATA_HOME`). Pass `--profile` and `--db` to use other paths.
 
 ### Photon (iMessage) Alerts
 
-[Photon](https://photon.codes) is a hosted iMessage API with a free tier. Its messages come from Photon's own line, so they notify you like any text (an iMessage from your own Apple ID to yourself wouldn't). Set it up once:
+[Photon](https://photon.codes) is a hosted iMessage API with a free tier. Its messages come from Photon's own line, so they notify you like any text (an iMessage from your own Apple ID to yourself wouldn't). `init` walks you through it and does steps 3 and 4 for you; by hand, it is:
 
 1. Sign up at [app.photon.codes](https://app.photon.codes), create a project and turn on iMessage (Spectrum). Note the project's ID and secret, and the iMessage line Photon gives you.
 2. **Text your Photon line once from your phone**, with anything. A shared (free-tier) line can only message a number that has texted it first; until you do, sends fail with "Photon won't message … yet".
@@ -35,7 +99,7 @@ Your Profile is a small TOML file with your Home, Countries, currency and Alert 
    cd sidecar/photon && npm ci
    ```
 
-4. Put your number in the Profile (E.164 format, or a Photon space ID) and your credentials in the environment. They never go in the Profile.
+4. Put your number in the Profile (E.164 format, or a Photon space ID), and store your project's ID and secret in your keychain with `hackathon-radar init` (or set `PHOTON_PROJECT_ID` and `PHOTON_PROJECT_SECRET` in the environment). They never go in the Profile.
 
    ```toml
    [alert_channel]
@@ -43,12 +107,7 @@ Your Profile is a small TOML file with your Home, Countries, currency and Alert 
    to = "+32470123456"
    ```
 
-   ```sh
-   export PHOTON_PROJECT_ID=...
-   export PHOTON_PROJECT_SECRET=...
-   ```
-
-Reading the credentials from the environment is a stopgap: they will move to your OS keychain, and `hackathon-radar init` and `doctor` will do steps 3 and 4 for you and check the rest. Until then, a scheduled Run only gets the `PATH` from `schedule install`, not these variables, so use ntfy for scheduled Runs or run `hackathon-radar run` from a shell that has them.
+Then `hackathon-radar test-alert` checks that an Alert reaches you.
 
 **Why there's some Node here.** Everything in hackathon-radar is Rust except [`sidecar/photon/`](sidecar/photon/), because Photon only ships a TypeScript SDK ([ADR 0005](docs/adr/0005-photon-node-sidecar.md)). For each Alert, the CLI runs `node sidecar/photon/send.mjs` once, with your number and the Alert text as JSON on stdin and the two credentials in its environment; the sidecar sends one message with the SDK, prints one line of JSON and exits. Its dependencies are pinned in `package-lock.json`, and their install scripts are turned off. If you installed the binary from somewhere other than this checkout, point `HACKATHON_RADAR_PHOTON_SIDECAR_DIR` at the `sidecar/photon` directory.
 
@@ -70,7 +129,7 @@ The schedule runs the binary you installed it from, so install the binary first 
 
 Each Run sends the listings that passed the Profile's rules to your Agent, chosen with `agent.adapter` in your Profile: `claude-code` (the default), `codex`, or `command` for any other coding agent. Whichever it is, the Agent may only search and read the web. It runs in an empty temporary directory, gets the prompt on stdin (or, with a command template, wherever you place it), and must answer with JSON matching the schema. The prompt and schema are built into hackathon-radar, and the answer is checked against the schema; if the Agent fails or answers in the wrong shape, the listings are kept and sent again on the next Run. A request that runs longer than 30 minutes is stopped. `[eligibility]` holds the facts organisers restrict on. hackathon-radar never signs you in to an Agent.
 
-**Claude Code** (`adapter = "claude-code"`) runs headless on your own `claude` login (or `ANTHROPIC_API_KEY`, if you set it). If `claude` isn't signed in, run `claude` once yourself.
+**Claude Code** (`adapter = "claude-code"`) runs headless on your own `claude` login (or `ANTHROPIC_API_KEY`, if you set it). If `claude` isn't signed in, run `claude` once yourself, with your subscription or an Anthropic Console account. hackathon-radar never stores your Anthropic key, and scheduled Runs don't see `ANTHROPIC_API_KEY` from your shell, so sign `claude` in for them.
 
 ```sh
 claude -p --permission-mode dontAsk --tools WebSearch,WebFetch --allowedTools WebSearch,WebFetch --strict-mcp-config --setting-sources "" --max-turns <cap> --output-format json --json-schema <schema>
@@ -127,7 +186,7 @@ The Agent estimates the fastest train journey from Home and the nearest airport 
 
 Set `travel.flight_budget` in your Profile (the most you'd pay for a return flight, in your Profile's `currency`, by default that of Home's country, or EUR) and each flight within your Countries is checked against it: it Fits only when its Fare, the cheapest return economy flight for one adult from any of your Home airports, leaving the day before the Hackathon starts and coming back the day after it ends, is at or under the budget. Under the Travel-funded rule (`travel.travel_funded_anywhere = true`), a Travel-funded Hackathon skips the budget, as it skips Countries; without the rule, its flight is checked against the budget like any other. The Alert entry shows the Fare after the trip, `fly BRU→MUC · ~€185`, `fly BRU→MUC · ~€96 from CRL` when another Home airport is cheaper, or `fly BRU→MUC · ~€185 (unverified)`; a Travel-funded entry shows its funding instead. A flight starting further away than `fares.horizon_weeks` (10) isn't held back: it Fits and is announced with `fare checked closer to the date`, so its application deadline can't pass while it waits, and the budget decides it once it is inside the horizon. If it then turns out over budget, it simply isn't announced again; no retraction is sent. Inside the horizon, a flight that has no Fare yet (the per-Run cap was reached, or the lookup failed) is held back from Alerts, Deadline reminders included, not dropped, until it has one, usually a Run or two later. Devpost listings give a submission period rather than the event's days, so they get no Fare and the budget leaves them unchecked. Without a Flight budget, Fares aren't looked up and flights stay in scope.
 
-Fares come from Google Flights through [SerpApi](https://serpapi.com/google-flights-api), on your own key: set `SERPAPI_API_KEY` in the environment (it is never stored in the Profile and never printed). Its free plan allows 250 searches a month, so a Run only looks up Fares for flights to Hackathons that Fit, aren't exempt from the budget by the Travel-funded rule, haven't started and start within `fares.horizon_weeks` (10); keeps each Fare for `fares.refresh_days` (14) before looking it up again; and makes at most `fares.lookups_per_run` lookups (10), soonest Hackathon first. Every Home airport goes into one search, so each Fare costs one search. At the defaults, two Runs a week use at most about 87 searches a month.
+Fares come from Google Flights through [SerpApi](https://serpapi.com/google-flights-api), on your own key, which `init` stores in your keychain (it is never stored in the Profile and never printed; `SERPAPI_API_KEY` in the environment overrides it). Its free plan allows 250 searches a month, so a Run only looks up Fares for flights to Hackathons that Fit, aren't exempt from the budget by the Travel-funded rule, haven't started and start within `fares.horizon_weeks` (10); keeps each Fare for `fares.refresh_days` (14) before looking it up again; and makes at most `fares.lookups_per_run` lookups (10), soonest Hackathon first. Every Home airport goes into one search, so each Fare costs one search. At the defaults, two Runs a week use at most about 87 searches a month.
 
 Without a key, your Agent estimates the Fares from web search in a separate, smaller read-only request with its own built-in prompt and schema, capped by `agent.fare_max_turns` (10 steps by default), and they are stored and shown as Unverified fares. A malformed answer is rejected and asked again on the next Run. Once you add a key, Unverified fares are replaced by real ones.
 
@@ -153,7 +212,7 @@ cargo test
 (cd sidecar/photon && npm ci && npm test)   # the Photon sidecar
 ```
 
-Tests never touch the network: Sources read saved fixtures from `tests/fixtures/`, no test runs a real Agent, and no test reaches Photon. The Photon channel's Rust tests and the sidecar's own tests (with a fake Photon SDK) check the same recorded sidecar outputs in `tests/fixtures/photon/`.
+Tests never touch the network or your keychain: Sources read saved fixtures from `tests/fixtures/`, no test runs a real Agent, no test reaches Photon, and secrets go to a fake keychain. The Photon channel's Rust tests and the sidecar's own tests (with a fake Photon SDK) check the same recorded sidecar outputs in `tests/fixtures/photon/`.
 
 ## License
 

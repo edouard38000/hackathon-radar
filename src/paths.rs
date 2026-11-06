@@ -11,6 +11,12 @@ pub fn default_profile_path() -> anyhow::Result<PathBuf> {
     profile_path_from(&|key| std::env::var_os(key))
 }
 
+/// `$XDG_CONFIG_HOME/hackathon-radar/secrets.toml`, else under `~/.config`: the
+/// owner-only file secrets fall back to when there is no keychain.
+pub fn default_secrets_path() -> anyhow::Result<PathBuf> {
+    secrets_path_from(&|key| std::env::var_os(key))
+}
+
 /// `$XDG_DATA_HOME/hackathon-radar/hackathon-radar.sqlite`, else under `~/.local/share`.
 pub fn default_database_path() -> anyhow::Result<PathBuf> {
     database_path_from(&|key| std::env::var_os(key))
@@ -56,6 +62,12 @@ fn profile_path_from(env: Env<'_>) -> anyhow::Result<PathBuf> {
         .join("profile.toml"))
 }
 
+fn secrets_path_from(env: Env<'_>) -> anyhow::Result<PathBuf> {
+    Ok(base_dir(env, "XDG_CONFIG_HOME", ".config")?
+        .join(APP_DIR)
+        .join("secrets.toml"))
+}
+
 fn database_path_from(env: Env<'_>) -> anyhow::Result<PathBuf> {
     Ok(base_dir(env, "XDG_DATA_HOME", ".local/share")?
         .join(APP_DIR)
@@ -91,6 +103,10 @@ mod tests {
         assert_eq!(
             profile_path_from(&env).unwrap(),
             PathBuf::from("/home/ada/.config/hackathon-radar/profile.toml")
+        );
+        assert_eq!(
+            secrets_path_from(&env).unwrap(),
+            PathBuf::from("/home/ada/.config/hackathon-radar/secrets.toml")
         );
         assert_eq!(
             database_path_from(&env).unwrap(),
