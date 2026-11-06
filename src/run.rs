@@ -7,6 +7,7 @@ use crate::alert::{self, Alert, AlertChannel, AlertKind};
 use crate::candidate::Candidate;
 use crate::clock::Clock;
 use crate::judging;
+use crate::matching;
 use crate::profile::Profile;
 use crate::rules;
 use crate::sources::Source;
@@ -51,6 +52,10 @@ pub struct RunOutcome {
     /// Why the Agent's travel estimates failed this Run, if they did; those
     /// cities are asked about again on the next Run.
     pub travel_failure: Option<String>,
+    /// How many collected listings were Duplicate listings merged into another.
+    pub duplicates: usize,
+    /// How many Hackathons wait for the Agent to say whether two listings are the same one.
+    pub waiting_on_duplicates: usize,
 }
 
 #[derive(Debug)]
@@ -75,7 +80,9 @@ pub fn run(deps: RunDeps<'_>, options: RunOptions) -> anyhow::Result<RunOutcome>
     }
     let collected = candidates.len();
 
-    let passed = rules::apply(candidates, deps.profile, today);
+    // From here on, the Run works on Hackathons: one Candidate per merged group of listings.
+    let merged = matching::merge(deps.agent, deps.profile, deps.store, candidates, today)?;
+    let passed = rules::apply(merged.hackathons, deps.profile, today);
     let judged = judging::judge(deps.agent, deps.profile, deps.store, passed, today)?;
     let fitting = judged.fitting;
     deps.store.save_hackathons(&fitting, today)?;
@@ -119,8 +126,10 @@ pub fn run(deps: RunDeps<'_>, options: RunOptions) -> anyhow::Result<RunOutcome>
         sent,
         judged: judged.judged_now,
         unjudged: judged.unjudged,
-        agent_failure: judged.failure,
+        agent_failure: judged.failure.or(merged.failure),
         unestimated: travelled.unestimated,
         travel_failure: travelled.failure,
+        duplicates: merged.duplicates,
+        waiting_on_duplicates: merged.waiting,
     })
 }

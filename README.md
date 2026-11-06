@@ -2,7 +2,7 @@
 
 A self-hosted hackathon tracker. An AI agent running on your own machine finds hackathons that fit where you live and what you care about, tracks application deadlines, and texts you when something new or travel-funded appears.
 
-> **Status:** early development. Runs read one Source and send Alerts by iMessage through Photon, or through ntfy.
+> **Status:** early development. Runs read hackathon.be, hackathonhub.eu, Luma, Devpost and your own ICS calendars, merge Duplicate listings, and send Alerts by iMessage through Photon, or through ntfy.
 
 ## Principles
 
@@ -13,7 +13,7 @@ A self-hosted hackathon tracker. An AI agent running on your own machine finds h
 
 ## Try it
 
-`hackathon-radar run --dry-run` reads the [hackathon.be](https://hackathon.be) calendar, keeps the listings that haven't ended and are in your Profile's Countries, asks your Agent (Claude Code, Codex or another coding agent) which of them are real Hackathons you're eligible for and which are Travel-funded, stores the results in a local SQLite database, and prints the Alert it would send. A dry run sends nothing and marks nothing as Announced.
+`hackathon-radar run --dry-run` reads the Sources ([hackathon.be](https://hackathon.be), [hackathonhub.eu](https://hackathonhub.eu), two Luma calendars, [Devpost](https://devpost.com) and any ICS calendars you add under `[sources]` in your Profile), merges listings of the same Hackathon from different Sources, keeps the listings that haven't ended and are in your Profile's Countries, asks your Agent (Claude Code, Codex or another coding agent) which of them are real Hackathons you're eligible for and which are Travel-funded, stores the results in a local SQLite database, and prints the Alert it would send. A dry run sends nothing and marks nothing as Announced.
 
 ```sh
 cargo run -- run --dry-run --profile examples/profile.toml

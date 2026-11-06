@@ -1,0 +1,53 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Luma//European Defense Tech Hub//EN
+X-WR-CALNAME:European Defense Tech Hub
+X-WR-CALDESC:Luma Calendar
+REFRESH-INTERVAL;VALUE=DURATION:PT12H
+X-PUBLISHED-TTL:PT12H
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+DTSTART:20261119T170000Z
+DTEND:20261119T200000Z
+DTSTAMP:20261105T140213Z
+ORGANIZER;CN="EDTH":MAILTO:calendar-invite@lu.ma
+UID:evt-gn5DL3kiuGJAbbv@events.lu.ma
+SUMMARY:Danish Defense Dinner
+DESCRIPTION:Get up-to-date information at: https://luma.com/european-cfqy
+ \n\nAddress:\nCheck event page for more details.\n\nHosted by EDTH
+LOCATION:https://luma.com/event/evt-gn5DL3kiuGJAbbv
+GEO:55.68;12.57
+SEQUENCE:216050533
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20270313T070000Z
+DTEND:20270314T150000Z
+DTSTAMP:20261105T140213Z
+ORGANIZER;CN="EDTH":MAILTO:calendar-invite@lu.ma
+UID:evt-MtT61QzGZbcfrBH@events.lu.ma
+SUMMARY:European Defense Tech Hackathon - Brussels
+DESCRIPTION:Get up-to-date information at: https://luma.com/edth-2027-brus
+ sels\n\nAddress:\nCheck event page for more details.\n\nHosted by EDTH & 5
+  others
+LOCATION:https://luma.com/event/evt-MtT61QzGZbcfrBH
+GEO:50.8409939811925;4.345942683556185
+SEQUENCE:216050533
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261114T083000Z
+DTEND:20261114T203000Z
+DTSTAMP:20261105T140213Z
+ORGANIZER;CN="{Tech: Europe}":MAILTO:calendar-invite@lu.ma
+UID:evt-sNWJnECt0wl2HWO@events.lu.ma
+SUMMARY:{Tech: Europe} Agentic AI Hack
+DESCRIPTION:Get up-to-date information at: https://luma.com/kar-hack\n\nAd
+ dress:\nCheck event page for more details.\n\nHosted by {Tech: Europe}
+LOCATION:https://luma.com/event/evt-sNWJnECt0wl2HWO
+GEO:48.99955962906044;8.468436867069798
+SEQUENCE:216050532
+STATUS:TENTATIVE
+END:VEVENT
+END:VCALENDAR

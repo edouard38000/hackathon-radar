@@ -75,3 +75,10 @@ max_turns = 50
 # (the schema itself), {prompt} (then stdin stays empty) and {max_turns}.
 # adapter = "command"
 # command = ["my-agent", "--json", "--schema", "{schema_file}"]
+
+# Sources. Optional: hackathon.be, hackathonhub.eu, Luma and Devpost are always
+# read. Add your own ICS calendar feeds here. A Run fetches at most
+# `hackathonhub_pages_per_run` new hackathonhub.eu event pages (default 40).
+# [sources]
+# ics = ["https://example.org/community-hackathons.ics"]
+# hackathonhub_pages_per_run = 40

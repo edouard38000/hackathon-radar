@@ -20,6 +20,13 @@ impl<T: HttpGet + ?Sized> HttpGet for &T {
     }
 }
 
+/// Lets a Run's Sources share one client, and so its politeness state.
+impl<T: HttpGet + ?Sized> HttpGet for std::rc::Rc<T> {
+    fn get_text(&self, url: &str) -> anyhow::Result<String> {
+        (**self).get_text(url)
+    }
+}
+
 /// The real HTTP client.
 pub struct HttpClient {
     agent: ureq::Agent,

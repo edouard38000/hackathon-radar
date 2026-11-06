@@ -1,0 +1,32 @@
+{
+  "title": "hackathon-radar same-Hackathon answers",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pairs"],
+  "properties": {
+    "pairs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "same", "reason"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The id of the pair, exactly as given."
+          },
+          "same": {
+            "type": "boolean",
+            "description": "True when both listings describe the same Hackathon (the same event on the same days), false when they are different events."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "One sentence explaining the answer."
+          }
+        }
+      }
+    }
+  }
+}
