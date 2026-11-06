@@ -9,6 +9,7 @@ use std::path::Path;
 use chrono::NaiveDate;
 use tempfile::TempDir;
 
+use hackathon_radar::agent::fares::FARES_SCHEMA;
 use hackathon_radar::agent::travel::TRAVEL_SCHEMA;
 use hackathon_radar::agent::{
     Agent, ApplicationStatus, JudgeRequest, Judgement, RECHECK_NOTE, TravelFunded,
@@ -16,6 +17,7 @@ use hackathon_radar::agent::{
 use hackathon_radar::alert::{Alert, AlertChannel};
 use hackathon_radar::candidate::Candidate;
 use hackathon_radar::clock::Clock;
+use hackathon_radar::fares::{FareLookup, FareQuery, FoundFare};
 use hackathon_radar::http::{HttpGet, HttpPost, PostRequest};
 use hackathon_radar::matching::question;
 use hackathon_radar::profile::{Eligibility, Profile};
@@ -199,6 +201,15 @@ pub struct FakeAgent {
     pub rechecked: RefCell<Vec<Vec<String>>>,
     /// When set, rechecks fail with this error while judging still works.
     pub recheck_fails_with: Option<String>,
+    /// Fare estimates by destination airport: the price, `None` for no price
+    /// found, and the Home airport. Airports not listed are left out of the
+    /// answer, so they get no Fare yet.
+    pub fare_estimates: Vec<(String, Option<u32>, Option<String>)>,
+    /// When set, Fare requests are answered with this text as it is.
+    pub fare_raw: Option<String>,
+    /// The destination airports sent, one list per Fare request. Fare
+    /// requests are not counted in `asked`.
+    pub fares_asked: RefCell<Vec<Vec<String>>>,
 }
 
 impl FakeAgent {
@@ -218,6 +229,9 @@ impl FakeAgent {
             pairs_asked: RefCell::new(Vec::new()),
             rechecked: RefCell::new(Vec::new()),
             recheck_fails_with: None,
+            fare_estimates: Vec::new(),
+            fare_raw: None,
+            fares_asked: RefCell::new(Vec::new()),
         }
     }
 
@@ -229,6 +243,54 @@ impl FakeAgent {
 
     pub fn recheck_requests(&self) -> usize {
         self.rechecked.borrow().len()
+    }
+
+    /// Estimates the Fare to `airport` at `price`, leaving from `from`.
+    pub fn with_fare_estimate(
+        mut self,
+        airport: &str,
+        price: Option<u32>,
+        from: Option<&str>,
+    ) -> Self {
+        self.fare_estimates
+            .push((airport.to_owned(), price, from.map(str::to_owned)));
+        self
+    }
+
+    /// Answers a Fare request from `fare_estimates`, reading the Trips from
+    /// the prompt as a real Agent would.
+    fn estimate_fares(&self, request: &JudgeRequest<'_>) -> anyhow::Result<String> {
+        let (_, listed) = request
+            .prompt
+            .rsplit_once("## Trips")
+            .expect("a Fare prompt lists its Trips last");
+        let trips: Vec<serde_json::Value> = serde_json::from_str(listed.trim()).unwrap();
+        let airports: Vec<String> = trips
+            .iter()
+            .map(|t| t["to"].as_str().unwrap().to_owned())
+            .collect();
+        self.fares_asked.borrow_mut().push(airports);
+        if let FakeAnswer::Fail(error) = &self.answer {
+            anyhow::bail!("{error}");
+        }
+        if let Some(raw) = &self.fare_raw {
+            return Ok(raw.clone());
+        }
+        let fares: Vec<serde_json::Value> = trips
+            .iter()
+            .filter_map(|t| {
+                let (_, price, from) = self
+                    .fare_estimates
+                    .iter()
+                    .find(|(airport, _, _)| airport == t["to"].as_str().unwrap())?;
+                Some(serde_json::json!({ "id": t["id"], "price": price, "home_airport": from }))
+            })
+            .collect();
+        Ok(serde_json::json!({ "fares": fares }).to_string())
+    }
+
+    pub fn fare_requests(&self) -> usize {
+        self.fares_asked.borrow().len()
     }
 
     /// Answers that these two listings are, or aren't, the same Hackathon.
@@ -357,6 +419,9 @@ impl Agent for FakeAgent {
         if request.schema == TRAVEL_SCHEMA {
             return self.estimate(request);
         }
+        if request.schema == FARES_SCHEMA {
+            return self.estimate_fares(request);
+        }
         if request.schema == question::SCHEMA {
             return self.answer_pairs(request);
         }
@@ -406,6 +471,51 @@ impl Agent for FakeAgent {
                 Ok(serde_json::json!({ "judgements": judgements }).to_string())
             }
         }
+    }
+}
+
+/// Looks up Fares from canned prices by destination airport, as SerpApi
+/// would, and records each query. An airport not listed has no flight.
+#[derive(Default)]
+pub struct FakeFares {
+    /// The price to each airport and the Home airport it leaves from.
+    pub fares: Vec<(String, u32, String)>,
+    /// When set, every lookup fails with this error.
+    pub fail_with: Option<String>,
+    pub asked: RefCell<Vec<FareQuery>>,
+}
+
+impl FakeFares {
+    pub fn with(mut self, airport: &str, price: u32, from: &str) -> Self {
+        self.fares
+            .push((airport.to_owned(), price, from.to_owned()));
+        self
+    }
+
+    pub fn lookups(&self) -> usize {
+        self.asked.borrow().len()
+    }
+
+    /// The destination airports looked up, in order.
+    pub fn airports(&self) -> Vec<String> {
+        self.asked.borrow().iter().map(|q| q.to.clone()).collect()
+    }
+}
+
+impl FareLookup for FakeFares {
+    fn lookup(&self, query: &FareQuery) -> anyhow::Result<Option<FoundFare>> {
+        self.asked.borrow_mut().push(query.clone());
+        if let Some(error) = &self.fail_with {
+            anyhow::bail!("{error}");
+        }
+        Ok(self
+            .fares
+            .iter()
+            .find(|(airport, _, _)| *airport == query.to)
+            .map(|(_, price, from)| FoundFare {
+                price: *price,
+                from_airport: Some(from.clone()),
+            }))
     }
 }
 
@@ -492,6 +602,8 @@ pub struct Harness {
     pub store: Store,
     pub channel: RecordingChannel,
     pub agent: FakeAgent,
+    /// The Fare lookup, standing in for a SerpApi key; `None` means no key.
+    pub fares: Option<FakeFares>,
     _dir: TempDir,
 }
 
@@ -504,6 +616,7 @@ impl Harness {
             store,
             channel: RecordingChannel::default(),
             agent: FakeAgent::approving(),
+            fares: None,
             _dir: dir,
         }
     }
@@ -532,6 +645,7 @@ impl Harness {
                 store: &mut self.store,
                 channel: &mut self.channel,
                 agent: &self.agent,
+                fares: self.fares.as_ref().map(|f| f as &dyn FareLookup),
             },
             options,
         )
@@ -554,6 +668,7 @@ impl Harness {
                 store: &mut self.store,
                 channel: &mut self.channel,
                 agent,
+                fares: self.fares.as_ref().map(|f| f as &dyn FareLookup),
             },
             options,
         )
@@ -585,6 +700,7 @@ impl Harness {
                 store: &mut self.store,
                 channel,
                 agent: &self.agent,
+                fares: self.fares.as_ref().map(|f| f as &dyn FareLookup),
             },
             options,
         )

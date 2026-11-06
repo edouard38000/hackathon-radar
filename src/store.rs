@@ -10,6 +10,7 @@ use crate::agent::{ApplicationStatus, INSTRUCTIONS_VERSION, Judgement, TravelFun
 use crate::candidate::Candidate;
 
 mod deadlines;
+mod fares;
 mod runs;
 mod travel;
 
@@ -182,6 +183,23 @@ const MIGRATIONS: &[&str] = &[
         funded_on     TEXT NOT NULL,
         announced_on  TEXT,
         PRIMARY KEY (source, source_key)
+    );",
+    // Fares (ticket 08, ADR 0002): the cheapest return Fare per route, dates
+    // and currency. from_airports is Home's airports joined by commas; a NULL
+    // price means the lookup found no flight; verified is 0 for an Unverified
+    // fare (estimated by the Agent) and 1 for one looked up through SerpApi.
+    "CREATE TABLE fares (
+        from_airports TEXT NOT NULL,
+        to_airport    TEXT NOT NULL,
+        outbound_date TEXT NOT NULL,
+        return_date   TEXT NOT NULL,
+        currency      TEXT NOT NULL,
+        price         INTEGER CHECK (price > 0),
+        from_airport  TEXT,
+        verified      INTEGER NOT NULL CHECK (verified IN (0, 1)),
+        source        TEXT NOT NULL,
+        checked_on    TEXT NOT NULL,
+        PRIMARY KEY (from_airports, to_airport, outbound_date, return_date, currency)
     );",
 ];
 

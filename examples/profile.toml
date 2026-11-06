@@ -30,10 +30,25 @@ airports = ["BRU", "CRL"]
 # train_limit_hours = 4
 # travel_funded_anywhere = false
 #
+# The Flight budget: the most you'd pay for a return flight, in your currency.
+# With it, a flight Fits only when its Fare is at or under the budget (under the
+# Travel-funded rule, a Travel-funded Hackathon skips it). Fares come from Google Flights through your
+# own SerpApi key, set as SERPAPI_API_KEY in the environment; without a key,
+# your Agent estimates them and they are marked unverified.
+# flight_budget = 200
+#
 # [[travel.overrides]]
 # city = "Munich"
 # train_hours = 5.5
 # airport = "MUC"
+
+# How sparingly Fares are looked up, to stay within SerpApi's free plan of 250
+# searches a month. Optional; these are the defaults.
+# [fares]
+# horizon_weeks = 10    # look up Fares for Hackathons starting within 10 weeks;
+#                       # later ones are announced with the fare checked later
+# refresh_days = 14     # look a Fare up again after 14 days
+# lookups_per_run = 10  # at most 10 lookups on one Run
 
 # Where Alerts go. Without this section, Alerts are only printed.
 # ntfy (https://ntfy.sh) needs no account: install its phone app, subscribe to
@@ -83,6 +98,9 @@ max_turns = 50
 # The most steps the Agent may take estimating train times and airports for
 # new cities, a separate, smaller request. Optional: 15 by default.
 # travel_max_turns = 15
+# The most steps the Agent may take estimating Fares, only when you have no
+# SerpApi key. Optional: 10 by default.
+# fare_max_turns = 10
 
 # To use Codex instead, replace the adapter line above with the two lines below.
 # It runs `codex exec` in a read-only sandbox with live web search, on your own

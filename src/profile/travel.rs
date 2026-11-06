@@ -1,5 +1,6 @@
 //! The Profile's settings for getting from Home to a Hackathon: the Train limit,
-//! and the person's corrections to the Agent's travel estimates (ADR 0002).
+//! the Flight budget, and the person's corrections to the Agent's travel
+//! estimates (ADR 0002).
 //!
 //! They are read from the optional `[travel]` section:
 //!
@@ -7,6 +8,7 @@
 //! [travel]
 //! train_limit_hours = 4
 //! travel_funded_anywhere = true
+//! flight_budget = 200   # in the Profile's currency
 //!
 //! [[travel.overrides]]
 //! city = "Munich"
@@ -27,10 +29,14 @@ pub struct TravelSettings {
     /// The Train limit, in minutes: the longest train journey from Home that
     /// still counts as going by train.
     pub train_limit_minutes: u32,
+    /// The Flight budget: the most the person will pay for a return flight, in
+    /// whole units of the Profile's currency. Without one, Fares aren't looked
+    /// up and flights are left to the other rules.
+    pub flight_budget: Option<u32>,
     /// The person's corrections, which always win over the Agent's estimates.
     pub overrides: Vec<TravelOverride>,
     /// The Travel-funded rule: whether a Travel-funded Hackathon counts
-    /// anywhere in the world, regardless of Countries. Off unless the Profile
+    /// anywhere in the world, regardless of Countries and the Flight budget. Off unless the Profile
     /// sets `travel_funded_anywhere = true`, because it sends listings from
     /// every country to the Agent.
     pub travel_funded_anywhere: bool,
@@ -40,6 +46,7 @@ impl Default for TravelSettings {
     fn default() -> Self {
         Self {
             train_limit_minutes: DEFAULT_TRAIN_LIMIT_MINUTES,
+            flight_budget: None,
             overrides: Vec::new(),
             travel_funded_anywhere: false,
         }
@@ -78,6 +85,7 @@ pub enum FlightOverride {
 #[serde(deny_unknown_fields)]
 pub(super) struct TravelFile {
     train_limit_hours: Option<f64>,
+    flight_budget: Option<u32>,
     #[serde(default)]
     overrides: Vec<OverrideFile>,
     #[serde(default)]
@@ -105,6 +113,17 @@ impl TravelSettings {
                 ));
                 DEFAULT_TRAIN_LIMIT_MINUTES
             }),
+        };
+
+        let flight_budget = match file.flight_budget {
+            Some(0) => {
+                problems.push(
+                    "travel.flight_budget is 0; give the most you'd pay for a return flight, such as 200"
+                        .to_owned(),
+                );
+                None
+            }
+            budget => budget,
         };
 
         let mut overrides: Vec<TravelOverride> = Vec::new();
@@ -169,6 +188,7 @@ impl TravelSettings {
 
         TravelSettings {
             train_limit_minutes,
+            flight_budget,
             overrides,
             travel_funded_anywhere: file.travel_funded_anywhere,
         }

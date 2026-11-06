@@ -35,7 +35,8 @@ pub enum Placeholder {
     /// The whole prompt. Without it, the prompt goes on stdin.
     Prompt,
     /// The request's step cap: the Profile's `agent.max_turns`, or
-    /// `agent.travel_max_turns` for travel estimates.
+    /// `agent.travel_max_turns` for travel estimates and
+    /// `agent.fare_max_turns` for Fare estimates.
     MaxTurns,
 }
 

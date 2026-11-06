@@ -2,10 +2,9 @@
 //!
 //! Countries and the Train limit (ticket 07): a Hackathon in one of the
 //! Profile's Countries is in scope when its trip is local or by train. Trips
-//! over the Train limit are labelled as flights ([`crate::travel`]) and, for
-//! now, stay in scope too: the Flight budget, which decides them, comes with
-//! Fares. So the Train limit labels trips but doesn't yet filter any out, and
-//! Countries is still the only place-based filter.
+//! over the Train limit are labelled as flights ([`crate::travel`]); the
+//! Flight budget then decides them once their Fare is known
+//! ([`crate::fares`], after the Agent has judged), so it isn't checked here.
 //!
 //! Countries can name regions ([`crate::countries`]): `Schengen` passes its
 //! member countries, and `US West Coast` the Hackathons in California, Oregon
@@ -14,6 +13,7 @@
 //! The Travel-funded rule (ticket 09): with `travel.travel_funded_anywhere`, a
 //! Hackathon outside Countries passes the data-only rules too, because only the
 //! Agent can tell whether it is Travel-funded; it Fits only once judged so.
+//! The same rule lets a Travel-funded flight skip the Flight budget.
 
 use chrono::NaiveDate;
 

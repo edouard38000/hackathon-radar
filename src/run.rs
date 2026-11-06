@@ -7,6 +7,7 @@ use crate::alert::{self, Alert, AlertChannel, AlertKind, attention};
 use crate::candidate::Candidate;
 use crate::clock::Clock;
 use crate::deadlines;
+use crate::fares::{self, FareLookup};
 use crate::judging;
 use crate::matching;
 use crate::profile::Profile;
@@ -24,6 +25,9 @@ pub struct RunDeps<'a> {
     pub store: &'a mut Store,
     pub channel: &'a mut dyn AlertChannel,
     pub agent: &'a dyn Agent,
+    /// Looks up Fares on the person's SerpApi key; `None` without a key, when
+    /// the Agent estimates Unverified fares instead.
+    pub fares: Option<&'a dyn FareLookup>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -75,6 +79,14 @@ pub struct RunOutcome {
     pub rechecked: usize,
     /// Why the Agent's recheck failed this Run, if it did; those Hackathons are due again.
     pub recheck_failure: Option<String>,
+    /// How many Fares were looked up, or estimated by the Agent, on this Run.
+    pub fares_looked_up: usize,
+    /// How many flights wait for a Fare; they are held back from Alerts until they have one.
+    pub waiting_on_fares: usize,
+    /// How many flights are over the Flight budget, so don't Fit.
+    pub over_budget: usize,
+    /// Why Fare lookups failed this Run, if they did; they are tried again on the next Run.
+    pub fare_failure: Option<String>,
 }
 
 #[derive(Debug)]
@@ -128,17 +140,32 @@ fn run_steps(
     let merged = matching::merge(deps.agent, deps.profile, deps.store, candidates, today)?;
     let passed = rules::apply(merged.hackathons, deps.profile, today);
     let judged = judging::judge(deps.agent, deps.profile, deps.store, passed, today)?;
-    let fitting = judged.fitting;
-    deps.store.save_hackathons(&fitting, today)?;
-    // An Agent that just failed to judge isn't asked for travel estimates too.
+    // An Agent that just failed to judge isn't asked for travel or Fare estimates too.
     let travelled = travel::plan(
         deps.agent,
         deps.profile,
         deps.store,
-        &fitting,
+        &judged.fitting,
         today,
         judged.failure.is_none(),
     )?;
+    // The Flight budget: flights over it don't Fit, so they aren't stored.
+    let priced = fares::price(
+        deps.agent,
+        deps.profile,
+        deps.store,
+        &judged.fitting,
+        &travelled,
+        deps.fares,
+        today,
+        judged.failure.is_none(),
+    )?;
+    let fitting: Vec<Candidate> = judged
+        .fitting
+        .into_iter()
+        .filter(|h| priced.fits(h))
+        .collect();
+    deps.store.save_hackathons(&fitting, today)?;
 
     // Deadlines, status and travel funding of known Hackathons; passed deadlines
     // close even when the Agent failed.
@@ -160,7 +187,9 @@ fn run_steps(
         AlertKind::Welcome
     };
     let not_announced = deps.store.not_announced(&fitting)?;
-    let entries = deadlines::entries(deps.store, deps.profile, &not_announced, today)?;
+    let mut entries = deadlines::entries(deps.store, deps.profile, &not_announced, today)?;
+    // Each flight's Fare; a flight over the budget or still waiting for its Fare is left out.
+    priced.fill(&mut entries);
     let composed = alert::compose_entries(entries, kind);
 
     // Whatever failed above, the Alert is composed from what's stored and sent;
@@ -217,6 +246,10 @@ fn run_steps(
         waiting_on_duplicates: merged.waiting,
         rechecked: rechecked.rechecked,
         recheck_failure: rechecked.failure,
+        fares_looked_up: priced.looked_up,
+        waiting_on_fares: priced.waiting(),
+        over_budget: priced.over_budget(),
+        fare_failure: priced.failure,
     };
     if !options.dry_run {
         deps.store.record_run(&RunRecord {
