@@ -27,6 +27,7 @@ pub mod report;
 pub mod rules;
 pub mod run;
 pub mod scheduler;
+pub mod sheet_import;
 pub mod sheet_layout;
 pub mod sources;
 pub mod store;

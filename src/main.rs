@@ -41,6 +41,8 @@ enum Command {
     Report(ReportArgs),
     /// Export the deadlines as a calendar file, or the Hackathons as a CSV for Google Sheets.
     Export(ExportArgs),
+    /// Import the personal tracker: a CSV export of its Sheet's Hackathons tab.
+    ImportSheet(ImportSheetArgs),
 }
 
 #[derive(clap::Args)]
@@ -65,6 +67,7 @@ fn main() -> ExitCode {
         Command::Schedule(args) => schedule_command(args),
         Command::Report(args) => report_command(args),
         Command::Export(args) => export_command(args),
+        Command::ImportSheet(args) => import_sheet_command(args),
     };
     match result {
         Ok(code) => code,
@@ -242,6 +245,108 @@ fn alert_channel(profile: &Profile, dry_run: bool) -> anyhow::Result<Box<dyn Ale
         }
         None => Box::new(PrintChannel),
     })
+}
+
+#[derive(clap::Args)]
+struct ImportSheetArgs {
+    /// The Hackathons tab exported as CSV (File > Download > Comma-separated values).
+    file: PathBuf,
+
+    /// Show what would be imported, and write nothing.
+    #[arg(long)]
+    dry_run: bool,
+
+    /// The Profile file [default: ~/.config/hackathon-radar/profile.toml]
+    #[arg(long, value_name = "PATH")]
+    profile: Option<PathBuf>,
+
+    /// The database file [default: ~/.local/share/hackathon-radar/hackathon-radar.sqlite]
+    #[arg(long, value_name = "PATH")]
+    db: Option<PathBuf>,
+}
+
+fn import_sheet_command(args: ImportSheetArgs) -> anyhow::Result<ExitCode> {
+    use hackathon_radar::sheet_import;
+
+    let profile_path = match args.profile {
+        Some(path) => path,
+        None => paths::default_profile_path()?,
+    };
+    let db_path = match args.db {
+        Some(path) => path,
+        None => paths::default_database_path()?,
+    };
+    let profile = Profile::load(&profile_path)?;
+    let csv = std::fs::read_to_string(&args.file)
+        .with_context(|| format!("reading {}", args.file.display()))?;
+    // A dry run doesn't create the database either.
+    let mut store = if args.dry_run && !db_path.exists() {
+        Store::open_in_memory()?
+    } else {
+        Store::open(&db_path)?
+    };
+    let report = sheet_import::import(
+        &mut store,
+        &profile,
+        &csv,
+        SystemClock.today(),
+        args.dry_run,
+    )?;
+
+    println!("Read {} rows from {}.", report.rows, args.file.display());
+    println!(
+        "{} {} new Hackathons; {} rows merged into Hackathons already stored; {} rows skipped.",
+        if args.dry_run {
+            "Would import"
+        } else {
+            "Imported"
+        },
+        report.imported,
+        report.merged,
+        report.skipped.len()
+    );
+    let mut reasons: Vec<(String, usize)> = Vec::new();
+    for skipped in &report.skipped {
+        let kind = match &skipped.why {
+            sheet_import::SkipReason::Unreadable(_) => "unreadable",
+            sheet_import::SkipReason::AlreadyImported => "already imported",
+            sheet_import::SkipReason::SameAsRow(_) => "repeated rows",
+        };
+        match reasons.iter_mut().find(|(k, _)| k == kind) {
+            Some((_, count)) => *count += 1,
+            None => reasons.push((kind.to_owned(), 1)),
+        }
+    }
+    if !reasons.is_empty() {
+        let reasons: Vec<String> = reasons.iter().map(|(k, n)| format!("{n} {k}")).collect();
+        println!("Skipped: {}.", reasons.join(", "));
+    }
+    for skipped in &report.skipped {
+        if skipped.why == sheet_import::SkipReason::AlreadyImported {
+            continue;
+        }
+        match &skipped.name {
+            Some(name) => println!("  row {} ({name}): {}", skipped.row, skipped.why),
+            None => println!("  row {}: {}", skipped.row, skipped.why),
+        }
+    }
+    if report.announced > 0 {
+        println!(
+            "{} rows were already notified in the Sheet, so they are Announced and won't be announced again.",
+            report.announced
+        );
+    }
+    for warning in &report.warnings {
+        eprintln!("warning: {warning}");
+    }
+    if args.dry_run {
+        println!("Dry run: nothing was written to {}.", db_path.display());
+    } else if report.imported + report.merged == 0 {
+        println!("Nothing new to store in {}.", db_path.display());
+    } else {
+        println!("Stored in {}.", db_path.display());
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 #[derive(clap::Args)]
