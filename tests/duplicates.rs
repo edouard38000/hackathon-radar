@@ -23,10 +23,12 @@ hackathon-radar: welcome! 2 Hackathons already fit you
 
 Since AI Hackathon 2026
 Turku, 6–8 Nov 2026
+Status unknown · deadline unknown
 https://sinceai.ai/hackathon
 
 Junction 2026
 Espoo, 13–15 Nov 2026
+Status unknown · deadline unknown
 https://www.hackjunction.com/";
 
 /// Every saved page the fixture Sources read, robots.txt files included.

@@ -10,22 +10,27 @@ hackathon-radar: welcome! 5 Hackathons already fit you
 
 Odoo Hackathon #6
 Ramillies, 20–22 Nov 2026
+Status unknown · deadline unknown
 https://hackathon.be/hackathons/odoo-hackathon-6-2026/
 
 MoMu Hackathon
 Antwerp, 21–22 Nov 2026
+Status unknown · deadline unknown
 https://hackathon.be/hackathons/momu-hackathon-2026/
 
 Hack The Future
 Antwerp, 24–25 Nov 2026
+Status unknown · deadline unknown
 https://hackathon.be/hackathons/hack-the-future-2026/
 
 CrossTechXperience Hackathon #3
 Kortrijk, 11–13 Dec 2026
+Status unknown · deadline unknown
 https://hackathon.be/hackathons/crosstechxperience-hackathon-3-2026/
 
 Hacking Health Liège
 Liège, 12 Mar 2027
+Status unknown · deadline unknown
 https://hackathon.be/hackathons/hacking-health-liege-2027/";
 
 fn candidate(name: &str, country: Option<&str>) -> Candidate {

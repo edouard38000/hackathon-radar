@@ -11,7 +11,9 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
 use hackathon_radar::agent::codex::{self, Codex};
-use hackathon_radar::agent::{self, Agent, JudgeRequest, Judgement, SCHEMA, TravelFunded};
+use hackathon_radar::agent::{
+    self, Agent, ApplicationStatus, JudgeRequest, Judgement, SCHEMA, TravelFunded,
+};
 use hackathon_radar::candidate::Candidate;
 use hackathon_radar::process::{Command, Output, ProcessRunner};
 use hackathon_radar::profile::{AgentAdapter, AgentSettings, Profile};
@@ -112,7 +114,8 @@ fn approving_answer(count: usize) -> String {
             serde_json::json!({
                 "id": id, "is_hackathon": true, "eligible": true,
                 "eligibility_restriction": null, "travel_funded": "none",
-                "travel_detail": null, "reason": "Participants build software on site.",
+                "travel_detail": null, "application_deadline": null,
+                "application_status": "unknown", "reason": "Participants build software on site.",
             })
         })
         .collect();
@@ -342,6 +345,8 @@ fn a_hand_made_event_stream_parses_into_judgements() {
                     eligibility_restriction: None,
                     travel_funded: TravelFunded::None,
                     travel_detail: None,
+                    deadline: Some(date(2026, 11, 28)),
+                    status: ApplicationStatus::Open,
                     reason: "Teams build software on site in Ghent over a weekend; the page states no participation restriction.".into(),
                 }
             ),
@@ -353,11 +358,53 @@ fn a_hand_made_event_stream_parses_into_judgements() {
                     eligibility_restriction: Some("Open to anyone aged 18 or over".into()),
                     travel_funded: TravelFunded::Partial,
                     travel_detail: Some("Lodging in Liège for participants travelling from abroad".into()),
+                    deadline: None,
+                    status: ApplicationStatus::OpenUntilFull,
                     reason: "Participants build data projects on open city data during the two days.".into(),
                 }
             ),
         ]
     );
+}
+
+/// Codex's strict output schemas need every key required, with optional ones
+/// nullable: the schema it gets says so for the deadline and status, and the
+/// answer is held to it.
+#[test]
+fn the_schema_codex_gets_requires_the_deadline_and_status_and_the_answer_must_carry_them() {
+    let runner = FakeRunner::printing(&fixture("codex/success.jsonl"), 0);
+    ask(&runner).unwrap();
+    let (_, schema_text) = runner.schema_files.borrow()[0].clone();
+    let schema: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
+    let item = &schema["properties"]["judgements"]["items"];
+    let required = item["required"].as_array().unwrap();
+    for key in ["application_deadline", "application_status"] {
+        assert!(required.contains(&key.into()), "{key} is required");
+    }
+    assert_eq!(
+        item["properties"]["application_deadline"]["type"],
+        serde_json::json!(["string", "null"])
+    );
+
+    let candidates = [
+        candidate("Ghent Build Weekend"),
+        candidate("Liège Data Days"),
+    ];
+    let ids = agent::numbered_ids(2);
+    let profile = profile(&["Belgium"]);
+    let request = JudgeRequest::new(&candidates, &ids, &profile);
+    let without_status = approving_answer(2).replace(",\"application_status\":\"unknown\"", "");
+    assert_ne!(without_status, approving_answer(2));
+    let runner = FakeRunner::printing(&events_answering(&without_status), 0);
+    let answer = Codex::new(&runner).judge(&request).unwrap();
+    let err = request.read_judgements(&answer).unwrap_err();
+    assert!(err.to_string().contains("application_status"), "{err}");
+
+    let runner = FakeRunner::printing(&events_answering(&approving_answer(2)), 0);
+    let answer = Codex::new(&runner).judge(&request).unwrap();
+    let judged = request.read_judgements(&answer).unwrap();
+    assert_eq!(judged[0].1.deadline, None);
+    assert_eq!(judged[0].1.status, ApplicationStatus::Unknown);
 }
 
 #[test]

@@ -1,1 +1,1 @@
-{"judgements": [{"id": "1", "is_hackathon": true, "eligible": true, "eligibility_restriction": null, "travel_funded": "none", "travel_detail": null, "reason": "A hackathon."}]}
+{"judgements": [{"id": "1", "is_hackathon": true, "eligible": true, "eligibility_restriction": null, "travel_funded": "none", "travel_detail": null, "application_deadline": null, "application_status": "unknown", "reason": "A hackathon."}]}

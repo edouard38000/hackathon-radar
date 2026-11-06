@@ -75,7 +75,8 @@ impl ProcessRunner for &ScriptedRunner {
             serde_json::json!({"judgements": [{
                 "id": ids[0], "is_hackathon": true, "eligible": true,
                 "eligibility_restriction": null, "travel_funded": "none",
-                "travel_detail": null, "reason": "Teams build software over a weekend.",
+                "travel_detail": null, "application_deadline": null,
+                "application_status": "unknown", "reason": "Teams build software over a weekend.",
             }]})
         };
         let stdout = match self.wrapping {

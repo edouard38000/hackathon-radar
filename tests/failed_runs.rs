@@ -221,7 +221,7 @@ fn a_failed_agent_step_still_sends_an_alert_for_judged_hackathons_not_yet_announ
     assert_eq!(
         texts(&harness),
         ["hackathon-radar: welcome! 1 Hackathon already fits you\n\n\
-          Ghent Hack\nGhent Hack City, 1 Dec 2026"]
+          Ghent Hack\nGhent Hack City, 1 Dec 2026\nStatus unknown · deadline unknown"]
     );
     assert_eq!(harness.announced_names(), ["Ghent Hack"]);
     assert_eq!(harness.unjudged_names(), ["Bruges Hack"]);
@@ -328,7 +328,7 @@ fn the_attention_alert_is_merged_into_the_runs_alert() {
           Last error: the Agent failed: timed out\n\
           Run `hackathon-radar doctor` to find out what's wrong.\n\n\
           hackathon-radar: welcome! 1 Hackathon already fits you\n\n\
-          Ghent Hack\nGhent Hack City, 1 Dec 2026"]
+          Ghent Hack\nGhent Hack City, 1 Dec 2026\nStatus unknown · deadline unknown"]
     );
     assert_eq!(second.alert.unwrap().text, texts(&harness)[0]);
     assert_eq!(harness.announced_names(), ["Ghent Hack"]);

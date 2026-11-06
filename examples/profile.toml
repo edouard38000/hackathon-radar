@@ -15,8 +15,13 @@ airports = ["BRU", "CRL"]
 # journey longer than the Train limit counts as a flight. Your Agent estimates
 # train times and nearest airports once per city; correct any of them with an
 # override, which sets train_hours, airport, or no_practical_flight = true.
+# The Travel-funded rule: with travel_funded_anywhere = true, a Hackathon whose
+# organiser covers travel or lodging counts anywhere in the world, outside your
+# Countries too. Off by default, because your Agent then also judges listings
+# from every other country.
 # [travel]
 # train_limit_hours = 4
+# travel_funded_anywhere = false
 #
 # [[travel.overrides]]
 # city = "Munich"
@@ -43,6 +48,20 @@ airports = ["BRU", "CRL"]
 # [schedule]
 # days = ["Monday", "Thursday"]
 # time = "08:00"
+
+# Application deadlines. Optional; these are the defaults. A Deadline reminder
+# goes out reminder_days before an open Hackathon that fits you closes. On each
+# Run your Agent rechecks the deadline, status and travel funding of up to
+# rechecks_per_run known Hackathons starting within recheck_horizon_days,
+# nearest deadline first, each at most once every recheck_every_days. Rechecks
+# are one request held to agent.max_turns (below), and each takes at least one
+# step, so rechecks_per_run can't exceed max_turns; a page or two each fits well.
+# [deadlines]
+# reminder_days = 3
+# rechecks_per_run = 10
+# recheck_every_days = 3
+# recheck_horizon_days = 120
+
 # Facts organisers restrict on. Leave out any you'd rather not give; the Agent
 # then treats them as no obstacle.
 [eligibility]

@@ -116,6 +116,11 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
             outcome.unestimated
         );
     }
+    if let Some(failure) = &outcome.recheck_failure {
+        eprintln!(
+            "warning: the Agent could not recheck deadlines and status; they are rechecked on the next Run: {failure}"
+        );
+    }
     if let Some(failure) = &outcome.alert_failure {
         eprintln!(
             "warning: the Alert channel could not send the Alert; it is tried again on the next Run: {failure}"

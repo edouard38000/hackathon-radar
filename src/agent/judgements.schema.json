@@ -16,6 +16,8 @@
           "eligibility_restriction",
           "travel_funded",
           "travel_detail",
+          "application_deadline",
+          "application_status",
           "reason"
         ],
         "properties": {
@@ -44,6 +46,16 @@
           "travel_detail": {
             "type": ["string", "null"],
             "description": "What is covered and for whom; null when travel_funded is none."
+          },
+          "application_deadline": {
+            "type": ["string", "null"],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "The last day to apply, as YYYY-MM-DD; null when the organiser gives no deadline or you can't find one."
+          },
+          "application_status": {
+            "type": "string",
+            "enum": ["open", "open_until_full", "not_open_yet", "waitlist", "closed", "unknown"],
+            "description": "Whether applications are open now: open, open until places run out, not open yet, waitlist only, closed, or unknown."
           },
           "reason": {
             "type": "string",

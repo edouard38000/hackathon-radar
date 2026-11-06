@@ -6,7 +6,9 @@ mod support;
 use std::cell::RefCell;
 
 use hackathon_radar::agent::claude_code::{self, ClaudeCode};
-use hackathon_radar::agent::{self, Agent, JudgeRequest, Judgement, SCHEMA, TravelFunded};
+use hackathon_radar::agent::{
+    self, Agent, ApplicationStatus, JudgeRequest, Judgement, SCHEMA, TravelFunded,
+};
 use hackathon_radar::candidate::Candidate;
 use hackathon_radar::process::{Command, Output, ProcessRunner};
 use hackathon_radar::profile::{AgentSettings, DEFAULT_MAX_TURNS, Profile};
@@ -222,6 +224,8 @@ fn a_recorded_result_parses_into_judgements() {
                     eligibility_restriction: None,
                     travel_funded: TravelFunded::None,
                     travel_detail: None,
+                    deadline: Some(date(2026, 11, 28)),
+                    status: ApplicationStatus::Open,
                     reason: "Teams build software on site in Ghent over a weekend; the page states no participation restriction.".into(),
                 }
             ),
@@ -233,11 +237,47 @@ fn a_recorded_result_parses_into_judgements() {
                     eligibility_restriction: Some("Open to anyone aged 18 or over".into()),
                     travel_funded: TravelFunded::Partial,
                     travel_detail: Some("Lodging in Liège for participants travelling from abroad".into()),
+                    deadline: None,
+                    status: ApplicationStatus::OpenUntilFull,
                     reason: "Participants build data projects on open city data during the two days.".into(),
                 }
             ),
         ]
     );
+}
+
+#[test]
+fn the_deadline_and_status_are_required_in_structured_output_and_the_deadline_may_be_null() {
+    let candidates = [
+        candidate("Ghent Build Weekend"),
+        candidate("Liège Data Days"),
+    ];
+    let ids = agent::numbered_ids(2);
+    let profile = test_profile();
+    let request = JudgeRequest::new(&candidates, &ids, &profile);
+    let read = |change: &dyn Fn(&mut serde_json::Value)| {
+        let mut result: serde_json::Value =
+            serde_json::from_str(&fixture("claude-code/success.json")).unwrap();
+        change(&mut result["structured_output"]["judgements"][0]);
+        let runner = FakeRunner::printing(&result.to_string(), 0);
+        let answer = ClaudeCode::new(&runner, 20).judge(&request).unwrap();
+        request
+            .read_judgements(&answer)
+            .map(|judged| judged[0].1.clone())
+    };
+
+    let nulled = read(&|item| item["application_deadline"] = serde_json::Value::Null).unwrap();
+    assert_eq!(nulled.deadline, None);
+    for key in ["application_deadline", "application_status"] {
+        let err = read(&|item| {
+            item.as_object_mut().unwrap().remove(key);
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains(key), "{key}: {err}");
+    }
+    assert!(read(&|item| item["application_status"] = serde_json::Value::Null).is_err());
+    assert!(read(&|item| item["application_status"] = "soon".into()).is_err());
+    assert!(read(&|item| item["application_deadline"] = "28/11/2026".into()).is_err());
 }
 
 #[test]
