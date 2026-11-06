@@ -3,11 +3,10 @@
 //! (`<script data-page="app" type="application/json">`), so each event comes
 //! out structured: name, start and end times, venue and format.
 //!
-//! MLH groups events by region (`AMER`, `EMEA`, `APAC`) and filters the page by
-//! it. The global MLH Source reads the regions outside the Americas; the North
-//! America Source pack reads the Americas, where most MLH events are, so people
-//! elsewhere don't fetch a dozen pages of North American student hackathons on
-//! every Run.
+//! MLH groups events by region (`EMEA`, `APAC`, `AMER`) and filters the page by
+//! it. MLH is a global Source: it reads every region, one region's pages after
+//! the other, and Countries leaves out what is too far away. Reading by region
+//! keeps each listing short and its pages in date order.
 
 use chrono::{DateTime, Datelike, NaiveDate};
 use serde::Deserialize;
@@ -22,10 +21,8 @@ pub const BASE_URL: &str = "https://www.mlh.com";
 /// The most result pages read per region on one Run (24 events a page).
 pub const MAX_PAGES: usize = 15;
 
-/// The MLH regions the global Source reads.
-pub const OUTSIDE_THE_AMERICAS: &[&str] = &["EMEA", "APAC"];
-/// The MLH region the North America Source pack reads.
-pub const AMERICAS: &[&str] = &["AMER"];
+/// MLH's regions: Europe, the Middle East and Africa; Asia-Pacific; the Americas.
+pub const REGIONS: &[&str] = &["EMEA", "APAC", "AMER"];
 
 pub struct Mlh<H> {
     http: H,
@@ -34,8 +31,13 @@ pub struct Mlh<H> {
 }
 
 impl<H: HttpGet> Mlh<H> {
-    /// Reads the current season's upcoming events in these MLH regions.
-    pub fn new(http: H, regions: &'static [&'static str], today: NaiveDate) -> Self {
+    /// Reads the current season's upcoming events in every MLH region.
+    pub fn new(http: H, today: NaiveDate) -> Self {
+        Self::in_regions(http, REGIONS, today)
+    }
+
+    /// Reads the current season's upcoming events in these MLH regions only.
+    pub fn in_regions(http: H, regions: &'static [&'static str], today: NaiveDate) -> Self {
         Self {
             http,
             regions,

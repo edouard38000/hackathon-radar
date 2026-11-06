@@ -105,17 +105,19 @@ fn fixture_http(pages: &[(String, String)]) -> Rc<FixtureHttp> {
 }
 
 #[test]
-fn mlh_reads_the_regions_outside_the_americas_for_everyone() {
+fn mlh_reads_every_region_for_everyone() {
     let http = fixture_http(&mlh_pages());
-    let source = Mlh::new(http.clone(), mlh::OUTSIDE_THE_AMERICAS, today());
+    let source = Mlh::new(http.clone(), today());
 
     let candidates = source.fetch().unwrap();
 
     assert_eq!(source.name(), "mlh");
     // The online-only Solana Hackathon is left out; the region's name after a
-    // city (`Turku, Varsinais-Suomi`) stays in the location.
+    // city (`Turku, Varsinais-Suomi`) stays in the location. The Americas'
+    // eleven events follow Europe's four.
+    assert_eq!(candidates.len(), 4 + 11);
     assert_eq!(
-        places(&candidates),
+        places(&candidates[..4]),
         [
             place("Since AI Hackathon", "Turku", "Finland"),
             place("HackTheBurgh", "Edinburgh", "United Kingdom"),
@@ -131,12 +133,18 @@ fn mlh_reads_the_regions_outside_the_americas_for_everyone() {
     assert_eq!(since_ai.source_key, "01a0eeb9-5924-af9e-cdc9-e95db9dced9e");
     assert_eq!(since_ai.link.as_deref(), Some("https://sinceai.ai/"));
     assert_eq!(since_ai.location.as_deref(), Some("Turku, Varsinais-Suomi"));
-    // The 2027 season, one page per region.
+    assert_eq!(
+        places(&candidates[4..5]),
+        [place("HackUTD Roadshow", "Richardson", "United States")]
+    );
+    // The 2027 season, each region's pages in turn.
     assert_eq!(
         *http.requested.borrow(),
         [
             "https://www.mlh.com/seasons/2027/events?region=EMEA",
             "https://www.mlh.com/seasons/2027/events?region=APAC",
+            "https://www.mlh.com/seasons/2027/events?region=AMER",
+            "https://www.mlh.com/seasons/2027/events?region=AMER&upcoming_page=2",
         ]
     );
 }
@@ -144,7 +152,7 @@ fn mlh_reads_the_regions_outside_the_americas_for_everyone() {
 #[test]
 fn mlh_reads_every_page_of_the_americas() {
     let http = fixture_http(&mlh_pages());
-    let source = Mlh::new(http.clone(), mlh::AMERICAS, today());
+    let source = Mlh::in_regions(http.clone(), &["AMER"], today());
 
     let candidates = source.fetch().unwrap();
 
@@ -182,7 +190,7 @@ fn mlh_without_its_page_data_is_an_error() {
         mlh::page_url(2027, "EMEA", 1),
         "<html><body>Maintenance</body></html>".to_owned(),
     )]);
-    let error = Mlh::new(http, &["EMEA"], today()).fetch().unwrap_err();
+    let error = Mlh::new(http, today()).fetch().unwrap_err();
     assert!(error.to_string().contains("no page data"), "{error}");
 }
 
@@ -403,7 +411,7 @@ fn the_source_pack_is_picked_from_homes_country() {
 fn each_plan_has_the_global_sources_and_its_packs() {
     let global = [
         SourceSpec::Devpost,
-        SourceSpec::Mlh(mlh::OUTSIDE_THE_AMERICAS),
+        SourceSpec::Mlh,
         SourceSpec::EthGlobal,
         SourceSpec::Cassini,
         SourceSpec::DevEvents,
@@ -422,7 +430,6 @@ fn each_plan_has_the_global_sources_and_its_packs() {
 
     let mut san_francisco = global.to_vec();
     san_francisco.extend([
-        SourceSpec::Mlh(mlh::AMERICAS),
         SourceSpec::Luma(luma::NORTH_AMERICA_CALENDARS[0]),
         SourceSpec::Luma(luma::NORTH_AMERICA_CALENDARS[1]),
         SourceSpec::Luma(luma::NORTH_AMERICA_CALENDARS[2]),
@@ -443,7 +450,7 @@ fn the_profile_can_add_packs_and_keeps_its_own_calendars() {
     assert_eq!(packs::packs(&both), [Pack::Europe, Pack::NorthAmerica]);
     let plan = packs::plan(&both);
     assert!(plan.contains(&SourceSpec::HackathonBe));
-    assert!(plan.contains(&SourceSpec::Mlh(mlh::AMERICAS)));
+    assert!(plan.contains(&SourceSpec::Luma(luma::NORTH_AMERICA_CALENDARS[0])));
     assert_eq!(
         plan.last(),
         Some(&SourceSpec::Ics("https://example.org/my.ics".into()))
@@ -491,7 +498,6 @@ fn the_planned_sources_are_built_in_order() {
             "hackathonhub.eu",
             "luma",
             "luma",
-            "mlh",
             "luma",
             "luma",
             "luma",
@@ -605,6 +611,44 @@ fn a_us_region_in_countries_fits_only_its_states() {
 }
 
 #[test]
+fn a_sao_paulo_run_without_the_north_america_pack_fits_mlhs_americas_events() {
+    // A Home whose country no Source pack covers (Mexico City would get the NA pack):
+    // São Paulo gets only the global Sources, MLH's Americas included.
+    let profile = profile(
+        "countries = [\"Brazil\", \"United States\"]\n\n[home]\ncity = \"São Paulo\"\n\
+         country = \"Brazil\"\nairports = [\"GRU\"]\n",
+    );
+    assert_eq!(packs::packs(&profile), []);
+    assert_eq!(profile.currency.code(), "BRL");
+    let sources = sources_for(&profile);
+    let mut harness = Harness::new(profile);
+
+    let outcome = harness.run(&sources, today(), DRY_RUN);
+
+    assert!(
+        outcome.failed_sources.is_empty(),
+        "{:?}",
+        outcome.failed_sources
+    );
+    let stored = harness.stored_names();
+    for americas in ["SF Hacks", "QWER Hacks", "BostonHacks", "HackUTD Roadshow"] {
+        assert!(
+            stored.iter().any(|s| s == americas),
+            "{americas}: {stored:?}"
+        );
+    }
+    // Countries still filter: Canada isn't in them, and Europe isn't either.
+    assert!(!stored.iter().any(|s| s == "HackTrent"));
+    assert!(!stored.iter().any(|s| s == "Junction"));
+    // Without the pack, Luma's US city calendars aren't read.
+    assert!(
+        !stored
+            .iter()
+            .any(|s| s == "She Builds: A Women in AI × Lovable Hackathon")
+    );
+}
+
+#[test]
 fn a_brussels_run_with_the_same_sources_fits_european_hackathons_only() {
     let profile = travel_profile(&["Schengen"], "");
     let sources = sources_for(&profile);
@@ -666,7 +710,7 @@ fn the_real_robots_files_allow_the_new_sources_paths() {
     ));
 
     let found = |source: &dyn Source| source.fetch().unwrap().len();
-    assert_eq!(found(&Mlh::new(polite.clone(), mlh::AMERICAS, today())), 11);
+    assert_eq!(found(&Mlh::new(polite.clone(), today())), 4 + 11);
     assert_eq!(found(&EthGlobal::new(polite.clone())), 1);
     assert_eq!(found(&Cassini::new(polite.clone())), 10);
     assert_eq!(found(&DevEvents::new(polite.clone())), 4);

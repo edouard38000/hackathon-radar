@@ -105,8 +105,8 @@ max_turns = 50
 # Sources. Optional: the global Sources (Devpost, MLH, ETHGlobal, the CASSINI
 # Hackathons and dev.events) are always read, and so is the Source pack for
 # Home's country: "europe" (hackathon.be, hackathonhub.eu and European Luma
-# calendars) or "north-america" (MLH in the Americas, and Luma's San Francisco,
-# New York and Boston calendars). Add other packs with `packs`, and your own
+# calendars) or "north-america" (Luma's San Francisco, New York and Boston
+# calendars). Add other packs with `packs`, and your own
 # ICS calendar feeds with `ics`. A Run fetches at most
 # `hackathonhub_pages_per_run` new hackathonhub.eu event pages (default 40).
 # [sources]

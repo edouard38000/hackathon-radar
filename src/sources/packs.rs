@@ -2,11 +2,10 @@
 //! Source pack Home's country picks, any packs the Profile adds, and the
 //! person's own calendars.
 //!
-//! - Global: Devpost, MLH outside the Americas, ETHGlobal, the CASSINI
-//!   Hackathons and dev.events.
+//! - Global: Devpost, MLH (every region), ETHGlobal, the CASSINI Hackathons
+//!   and dev.events.
 //! - Europe: hackathon.be, hackathonhub.eu and the European Luma calendars.
-//! - North America: MLH in the Americas, and Luma's San Francisco, New York and
-//!   Boston calendars.
+//! - North America: Luma's San Francisco, New York and Boston calendars.
 //!
 //! Web search, the last global Source in ADR 0009, goes through the Agent and
 //! isn't one of these: a Run already makes the two Agent requests ADR 0004
@@ -29,7 +28,7 @@ use crate::sources::ethglobal::EthGlobal;
 use crate::sources::hackathon_be::HackathonBe;
 use crate::sources::hackathonhub::HackathonHub;
 use crate::sources::luma::{self, LumaCalendar};
-use crate::sources::mlh::{self, Mlh};
+use crate::sources::mlh::Mlh;
 use crate::sources::{Source, places};
 
 /// A Source pack: the Sources for one part of the world.
@@ -71,15 +70,10 @@ impl Pack {
                 sources.extend(luma::EUROPE_CALENDARS.iter().map(|u| SourceSpec::Luma(u)));
                 sources
             }
-            Pack::NorthAmerica => {
-                let mut sources = vec![SourceSpec::Mlh(mlh::AMERICAS)];
-                sources.extend(
-                    luma::NORTH_AMERICA_CALENDARS
-                        .iter()
-                        .map(|u| SourceSpec::Luma(u)),
-                );
-                sources
-            }
+            Pack::NorthAmerica => luma::NORTH_AMERICA_CALENDARS
+                .iter()
+                .map(|u| SourceSpec::Luma(u))
+                .collect(),
         }
     }
 }
@@ -94,8 +88,8 @@ impl fmt::Display for Pack {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceSpec {
     Devpost,
-    /// MLH, in these MLH regions.
-    Mlh(&'static [&'static str]),
+    /// MLH, in every region.
+    Mlh,
     EthGlobal,
     Cassini,
     DevEvents,
@@ -111,7 +105,7 @@ pub enum SourceSpec {
 pub fn global() -> Vec<SourceSpec> {
     vec![
         SourceSpec::Devpost,
-        SourceSpec::Mlh(mlh::OUTSIDE_THE_AMERICAS),
+        SourceSpec::Mlh,
         SourceSpec::EthGlobal,
         SourceSpec::Cassini,
         SourceSpec::DevEvents,
@@ -175,7 +169,7 @@ where
         .map(|spec| -> Box<dyn Source> {
             match spec {
                 SourceSpec::Devpost => Box::new(Devpost::new(http.clone())),
-                SourceSpec::Mlh(regions) => Box::new(Mlh::new(http.clone(), regions, today)),
+                SourceSpec::Mlh => Box::new(Mlh::new(http.clone(), today)),
                 SourceSpec::EthGlobal => Box::new(EthGlobal::new(http.clone())),
                 SourceSpec::Cassini => Box::new(Cassini::new(http.clone())),
                 SourceSpec::DevEvents => Box::new(DevEvents::new(http.clone())),
