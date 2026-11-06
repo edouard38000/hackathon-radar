@@ -14,12 +14,14 @@ use crate::sources::packs::Pack;
 use crate::sources::places;
 
 mod deadlines;
+mod fares;
 mod travel;
 
 pub use deadlines::{
     DEFAULT_RECHECK_EVERY_DAYS, DEFAULT_RECHECK_HORIZON_DAYS, DEFAULT_RECHECKS_PER_RUN,
     DEFAULT_REMINDER_DAYS, DeadlineSettings,
 };
+pub use fares::FareSettings;
 pub use travel::{DEFAULT_TRAIN_LIMIT_MINUTES, FlightOverride, TravelOverride, TravelSettings};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +44,8 @@ pub struct Profile {
     pub sources: SourceSettings,
     /// Deadline reminders and rechecks of known Hackathons.
     pub deadlines: DeadlineSettings,
+    /// How often Fares are looked up, within SerpApi's free plan.
+    pub fares: FareSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -122,6 +126,10 @@ pub struct AgentSettings {
     /// The most Agent steps the travel estimates request may use (ADR 0004).
     #[serde(default = "default_travel_max_turns")]
     pub travel_max_turns: u32,
+    /// The most Agent steps the Fare estimates request may use, made only
+    /// without a SerpApi key (ADR 0004).
+    #[serde(default = "default_fare_max_turns")]
+    pub fare_max_turns: u32,
 }
 
 /// The person's own Sources, extra Source packs, and limits on the built-in ones.
@@ -192,6 +200,13 @@ fn default_travel_max_turns() -> u32 {
     DEFAULT_TRAVEL_MAX_TURNS
 }
 
+/// Enough to estimate a Run's batch of Fares, a search or two each.
+pub const DEFAULT_FARE_MAX_TURNS: u32 = 10;
+
+fn default_fare_max_turns() -> u32 {
+    DEFAULT_FARE_MAX_TURNS
+}
+
 impl Default for AgentSettings {
     fn default() -> Self {
         Self {
@@ -200,6 +215,7 @@ impl Default for AgentSettings {
             command: None,
             experimental: false,
             travel_max_turns: DEFAULT_TRAVEL_MAX_TURNS,
+            fare_max_turns: DEFAULT_FARE_MAX_TURNS,
         }
     }
 }
@@ -251,6 +267,8 @@ struct ProfileFile {
     sources: SourceSettings,
     #[serde(default)]
     deadlines: DeadlineSettings,
+    #[serde(default)]
+    fares: fares::FaresFile,
 }
 
 #[derive(Deserialize)]
@@ -395,8 +413,13 @@ impl Profile {
             problems
                 .push("agent.travel_max_turns is 0; the Agent needs at least one step".to_owned());
         }
+        if file.agent.fare_max_turns == 0 {
+            problems
+                .push("agent.fare_max_turns is 0; the Agent needs at least one step".to_owned());
+        }
         let travel = TravelSettings::from_file(file.travel, &mut problems);
         file.deadlines.check(file.agent.max_turns, &mut problems);
+        let fares = FareSettings::from_file(file.fares, &mut problems);
 
         let mut sources = file.sources;
         sources.ics = sources.ics.iter().map(|u| u.trim().to_owned()).collect();
@@ -425,6 +448,7 @@ impl Profile {
             travel,
             sources,
             deadlines: file.deadlines,
+            fares,
         })
     }
 
@@ -669,10 +693,12 @@ mod tests {
                     command: None,
                     experimental: false,
                     travel_max_turns: DEFAULT_TRAVEL_MAX_TURNS,
+                    fare_max_turns: DEFAULT_FARE_MAX_TURNS,
                 },
                 travel: TravelSettings::default(),
                 sources: SourceSettings::default(),
                 deadlines: DeadlineSettings::default(),
+                fares: FareSettings::default(),
             }
         );
         assert!(profile.includes_country("belgium"));
@@ -761,6 +787,7 @@ mod tests {
                 command: None,
                 experimental: false,
                 travel_max_turns: 6,
+                fare_max_turns: DEFAULT_FARE_MAX_TURNS,
             }
         );
     }

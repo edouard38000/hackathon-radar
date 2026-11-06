@@ -10,6 +10,8 @@ use hackathon_radar::alert::ntfy::{self, NtfyChannel};
 use hackathon_radar::alert::photon::{self, PhotonChannel};
 use hackathon_radar::alert::{AlertChannel, PrintChannel};
 use hackathon_radar::clock::{Clock, SystemClock};
+use hackathon_radar::fares::FareLookup;
+use hackathon_radar::fares::serpapi::SerpApi;
 use hackathon_radar::http::HttpClient;
 use hackathon_radar::process::SystemRunner;
 use hackathon_radar::profile::{AlertChannelSetting, Profile};
@@ -82,6 +84,9 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
     if let Some(warning) = agent.warning() {
         eprintln!("warning: {warning}");
     }
+    // Fares on the person's own SerpApi key, if set; without it, the Agent
+    // estimates Unverified fares. The key is never printed.
+    let serpapi = SerpApi::from_env(PoliteHttp::new(HttpClient::new()).ignoring_robots());
 
     let outcome = run::run(
         RunDeps {
@@ -91,6 +96,7 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
             store: &mut store,
             channel: channel.as_mut(),
             agent: agent.as_ref(),
+            fares: serpapi.as_ref().map(|s| s as &dyn FareLookup),
         },
         RunOptions {
             dry_run: args.dry_run,
@@ -123,6 +129,9 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
             "warning: the Alert channel could not send the Alert; it is tried again on the next Run: {failure}"
         );
     }
+    if let Some(failure) = &outcome.fare_failure {
+        eprintln!("warning: Fare lookups failed; they are tried again on the next Run: {failure}");
+    }
     println!(
         "Collected {} Candidates; {} Hackathons fit and are stored in {}.",
         outcome.collected,
@@ -139,6 +148,19 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
         "The Agent judged {} Candidates; {} wait for the next Run.",
         outcome.judged, outcome.unjudged
     );
+    if profile.travel.flight_budget.is_some() {
+        println!(
+            "{} {} Fares; {} flights are over the Flight budget and {} wait for a Fare.",
+            if serpapi.is_some() {
+                "Looked up"
+            } else {
+                "Without SERPAPI_API_KEY, the Agent estimated"
+            },
+            outcome.fares_looked_up,
+            outcome.over_budget,
+            outcome.waiting_on_fares
+        );
+    }
     if args.dry_run {
         match &outcome.alert {
             Some(alert) => println!(

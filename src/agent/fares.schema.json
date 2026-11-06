@@ -1,0 +1,34 @@
+{
+  "title": "hackathon-radar fare estimates",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["fares"],
+  "properties": {
+    "fares": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "price", "home_airport"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The id of the Trip, exactly as given."
+          },
+          "price": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "The cheapest return economy fare for one adult, in whole units of the given currency; null when you can't find one."
+          },
+          "home_airport": {
+            "type": ["string", "null"],
+            "pattern": "^[A-Z]{3}$",
+            "description": "Which of the Trip's `from` airports that fare leaves from; null when price is null or you can't tell."
+          }
+        }
+      }
+    }
+  }
+}

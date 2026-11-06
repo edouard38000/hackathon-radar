@@ -6,7 +6,8 @@
 //! removes it nor sets it, and never signs anyone in.
 //!
 //! Codex has no step cap of its own, so neither `agent.max_turns` nor
-//! `agent.travel_max_turns` (a request's `step_cap`) applies to it;
+//! `agent.travel_max_turns` or `agent.fare_max_turns` (a request's
+//! `step_cap`) applies to it;
 //! the time limit does.
 //!
 //! Experimental: the read-only lockdown below comes from OpenAI's docs and is
