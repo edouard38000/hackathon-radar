@@ -9,7 +9,10 @@ use rusqlite::{Connection, params};
 use crate::agent::{INSTRUCTIONS_VERSION, Judgement, TravelFunded};
 use crate::candidate::Candidate;
 
+mod runs;
 mod travel;
+
+pub use runs::{FailedStreak, RunCounts, RunRecord};
 
 /// Applied in order; `PRAGMA user_version` records how many have run.
 /// Later changes append a migration and never edit an earlier one.
@@ -124,6 +127,26 @@ const MIGRATIONS: &[&str] = &[
     SELECT source, source_key, name, start_date, end_date, city, location, country, link,
            source, source_key, first_seen, last_seen
     FROM hackathons;",
+    // Run history (ticket 10): one row per Run that wasn't a dry run, with why
+    // it failed (NULL when it succeeded), its counts, and whether its Alert
+    // carried the needs-attention part to the person.
+    "CREATE TABLE runs (
+        id             INTEGER PRIMARY KEY,
+        day            TEXT NOT NULL,
+        started_at     TEXT NOT NULL,
+        finished_at    TEXT NOT NULL,
+        succeeded      INTEGER NOT NULL CHECK (succeeded IN (0, 1)),
+        failure        TEXT,
+        collected      INTEGER NOT NULL,
+        judged         INTEGER NOT NULL,
+        unjudged       INTEGER NOT NULL,
+        fit            INTEGER NOT NULL,
+        announced      INTEGER NOT NULL,
+        sent           INTEGER NOT NULL CHECK (sent IN (0, 1)),
+        failed_sources INTEGER NOT NULL,
+        attention_sent INTEGER NOT NULL CHECK (attention_sent IN (0, 1)),
+        CHECK ((succeeded = 1) = (failure IS NULL))
+    );",
 ];
 
 /// Names a listing: its Source and its key within that Source.
@@ -988,5 +1011,50 @@ mod tests {
         assert_eq!(listings.len(), 1);
         assert_eq!(listings[0].hackathon, ("s".to_owned(), "k".to_owned()));
         assert!(store.hackathons().unwrap()[0].announced_on.is_some());
+    }
+
+    #[test]
+    fn a_database_at_schema_5_gains_an_empty_run_history() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("schema-5.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..5] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 5).unwrap();
+        }
+
+        let mut store = Store::open(&path).unwrap();
+
+        assert!(store.runs().unwrap().is_empty());
+        assert_eq!(store.failed_streak().unwrap(), FailedStreak::default());
+
+        let at = chrono::DateTime::from_timestamp(1_794_200_000, 0).unwrap();
+        let run = |failure: Option<&str>, attention_sent| RunRecord {
+            day: NaiveDate::from_ymd_opt(2026, 11, 9).unwrap(),
+            started_at: at,
+            finished_at: at,
+            failure: failure.map(str::to_owned),
+            counts: RunCounts::default(),
+            attention_sent,
+        };
+        for record in [
+            run(Some("old"), true),
+            run(None, false),
+            run(Some("timed out"), false),
+            run(Some("timed out"), true),
+        ] {
+            store.record_run(&record).unwrap();
+        }
+        assert_eq!(store.runs().unwrap()[3], run(Some("timed out"), true));
+        assert_eq!(
+            store.failed_streak().unwrap(),
+            FailedStreak {
+                runs: 2,
+                attention_sent: true
+            },
+            "only the failures since the last success count"
+        );
     }
 }

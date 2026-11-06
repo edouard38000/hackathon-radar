@@ -332,10 +332,13 @@ fn an_alert_that_fails_to_send_announces_nothing_and_is_tried_again() {
     let mut harness = Harness::new(profile(&["Belgium"]));
     harness.channel.fail_with = Some("ntfy is down".into());
 
-    let error = harness
-        .try_run(&listing(&["Ghent Hack"]), date(2026, 11, 9), LIVE_RUN)
-        .unwrap_err();
-    assert!(format!("{error:#}").contains("ntfy is down"), "{error:#}");
+    let failed = harness.run(&listing(&["Ghent Hack"]), date(2026, 11, 9), LIVE_RUN);
+    assert_eq!(failed.alert_failure.as_deref(), Some("ntfy is down"));
+    assert!(!failed.sent);
+    assert_eq!(
+        failed.failure.as_deref(),
+        Some("the Alert channel failed: ntfy is down")
+    );
     assert_eq!(harness.stored_names(), ["Ghent Hack"]);
     assert!(harness.announced_names().is_empty());
 

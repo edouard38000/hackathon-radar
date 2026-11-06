@@ -341,19 +341,18 @@ fn a_run_whose_imessage_is_refused_announces_nothing_and_the_next_run_sends_it()
     let mut harness = Harness::new(profile(&["Belgium"]));
     let refused = FakeRunner::answering("not-texted-yet.json");
 
-    let error = harness
+    let failed = harness
         .try_run_with_channel(
             &mut channel(&refused),
             &[hackathon_be_from_fixture()],
             date(2026, 11, 9),
             LIVE_RUN,
         )
-        .unwrap_err();
+        .unwrap();
 
-    assert!(
-        format!("{error:#}").contains("texted it first"),
-        "{error:#}"
-    );
+    let error = failed.alert_failure.expect("the Alert channel failed");
+    assert!(error.contains("texted it first"), "{error}");
+    assert!(!failed.sent);
     assert!(harness.announced_names().is_empty());
     assert_eq!(harness.stored_names().len(), 5, "what Fits is still stored");
 

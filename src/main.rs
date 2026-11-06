@@ -116,6 +116,11 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
             outcome.unestimated
         );
     }
+    if let Some(failure) = &outcome.alert_failure {
+        eprintln!(
+            "warning: the Alert channel could not send the Alert; it is tried again on the next Run: {failure}"
+        );
+    }
     println!(
         "Collected {} Candidates; {} Hackathons fit and are stored in {}.",
         outcome.collected,
@@ -142,19 +147,25 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
         }
     } else if outcome.alert.is_none() {
         println!("\nNothing new to send.");
+    } else if !outcome.sent {
+        // The Alert channel failed; reported on stderr above.
     } else if let Some(AlertChannelSetting::Ntfy(_)) = &profile.alert_channel {
         println!("\nSent the Alert through ntfy.");
     } else if let Some(AlertChannelSetting::Photon(_)) = &profile.alert_channel {
         println!("\nSent the Alert by iMessage through Photon.");
     }
+    if outcome.needs_attention && outcome.sent {
+        println!("The Alert told you hackathon-radar needs attention.");
+    }
 
-    // Every Source failing means the Run learnt nothing, which a scheduler should see.
-    let all_failed = !sources.is_empty() && outcome.failed_sources.len() == sources.len();
-    // So does an Agent that couldn't judge; its Candidates are kept for the next Run.
-    Ok(if all_failed || outcome.agent_failure.is_some() {
-        ExitCode::FAILURE
-    } else {
-        ExitCode::SUCCESS
+    // A failed Run (see hackathon_radar::run::failure) exits non-zero with one
+    // line saying why, for the schedule's log; nothing it collected is lost.
+    Ok(match &outcome.failure {
+        Some(failure) => {
+            eprintln!("error: the Run failed: {failure}");
+            ExitCode::FAILURE
+        }
+        None => ExitCode::SUCCESS,
     })
 }
 

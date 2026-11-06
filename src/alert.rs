@@ -1,5 +1,6 @@
 //! Alerts: composing the text a person receives, and the channel it goes out on.
 
+pub mod attention;
 pub mod ntfy;
 pub mod photon;
 
