@@ -131,6 +131,19 @@ Fares come from Google Flights through [SerpApi](https://serpapi.com/google-flig
 
 Without a key, your Agent estimates the Fares from web search in a separate, smaller read-only request with its own built-in prompt and schema, capped by `agent.fare_max_turns` (10 steps by default), and they are stored and shown as Unverified fares. A malformed answer is rejected and asked again on the next Run. Once you add a key, Unverified fares are replaced by real ones.
 
+## Reports and exports
+
+Beyond Alerts, you can browse what Fits you. Each command reads the local database (never the network), writes to stdout or to `--out <file>`, takes `--profile` and `--db` as for `run`, and with `--all` also lists the Hackathons that don't Fit (saying why) or are closed.
+
+```sh
+hackathon-radar report                  # Markdown: every Hackathon that Fits, soonest first, "Closing soon" on top
+hackathon-radar report --html --out report.html
+hackathon-radar export ics --out deadlines.ics   # an all-day "Apply: <name>" event on each open deadline, with an alarm [deadlines] reminder_days before
+hackathon-radar export sheet --out hackathons.csv  # the personal tracker's Sheet columns, to import into Google Sheets
+```
+
+The database stays the source of truth: these files are generated from it and never read back. Re-importing a newer calendar updates its events rather than duplicating them.
+
 ## Development
 
 ```sh
