@@ -31,3 +31,7 @@ ureq = "3"
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3.7"
 
+
+[dev-dependencies]
+# Parses the setup skill's YAML frontmatter in tests/setup_skill.rs.
+serde_norway = "0.9"
