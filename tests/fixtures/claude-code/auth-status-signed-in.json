@@ -1,0 +1,9 @@
+{
+  "loggedIn": true,
+  "authMethod": "claude.ai",
+  "apiProvider": "firstParty",
+  "email": "ada.lovelace@example.com",
+  "orgId": "org-0123456789",
+  "orgName": "Ada's Organisation",
+  "subscriptionType": "max"
+}

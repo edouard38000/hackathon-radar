@@ -147,8 +147,9 @@ pub struct InitFlags {
     pub install_schedule: Option<bool>,
 }
 
-/// Runs another program; a reference so `init` can lend it to the Alert channel.
-struct Runner<'a>(&'a dyn ProcessRunner);
+/// Runs another program; a reference so `init` (and `doctor`) can lend it to
+/// the Alert channel.
+pub(crate) struct Runner<'a>(pub(crate) &'a dyn ProcessRunner);
 
 impl ProcessRunner for Runner<'_> {
     fn run(&self, command: &Command) -> anyhow::Result<Output> {
@@ -200,7 +201,7 @@ pub fn find_on_path(program: &str, path: Option<&std::ffi::OsStr>) -> Option<Pat
         .find(|candidate| is_executable(candidate))
 }
 
-fn is_executable(path: &Path) -> bool {
+pub(crate) fn is_executable(path: &Path) -> bool {
     let Ok(metadata) = std::fs::metadata(path) else {
         return false;
     };

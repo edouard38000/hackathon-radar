@@ -207,6 +207,40 @@ fn renders_the_systemd_units_for_a_custom_schedule() {
 }
 
 #[test]
+fn installed_files_read_back_to_the_same_command_line_and_path() {
+    for job in [default_job(), custom_job()] {
+        let expected = (job.command_line().unwrap(), Some(job.path.clone()));
+        assert_eq!(
+            launchd::parse_plist(&launchd::render_plist(&job).unwrap()),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            systemd::parse_service(&systemd::render_service(&job).unwrap()),
+            Some(expected)
+        );
+    }
+    assert_eq!(launchd::parse_plist("<plist></plist>"), None);
+    assert_eq!(systemd::parse_service("[Service]\n"), None);
+}
+
+#[test]
+fn the_installed_run_is_read_from_the_platform_files() {
+    let tmp = TempDir::new().unwrap();
+    for platform in [launchd_platform(&tmp), systemd_platform(&tmp)] {
+        assert_eq!(scheduler::installed_run(&platform).unwrap(), None);
+        let job = job_in(&tmp, Schedule::default());
+        let mut system = FakeSystem::new(&tmp);
+        scheduler::install(&platform, &job, &mut system).unwrap();
+
+        let run = scheduler::installed_run(&platform).unwrap().unwrap();
+        assert_eq!(run.binary(), Some(job.binary.to_str().unwrap()));
+        assert_eq!(run.flag("--profile"), Some(job.profile.to_str().unwrap()));
+        assert_eq!(run.flag("--db"), Some(job.db.to_str().unwrap()));
+        assert_eq!(run.path.as_deref(), Some(job.path.as_str()));
+    }
+}
+
+#[test]
 fn without_a_shell_path_runs_get_the_platform_default() {
     for from_env in [None, Some("".into())] {
         let run_path = RunPath::from_env(from_env);

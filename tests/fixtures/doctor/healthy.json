@@ -1,0 +1,246 @@
+{
+  "version": 1,
+  "ok": true,
+  "counts": {
+    "pass": 26,
+    "warn": 0,
+    "fail": 0,
+    "skip": 0
+  },
+  "checks": [
+    {
+      "id": "profile",
+      "section": "profile",
+      "name": "Profile",
+      "status": "pass",
+      "reason": "$TMP/config/profile.toml is valid.",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "secrets.photon-project-id",
+      "section": "secrets",
+      "name": "Photon project ID",
+      "status": "pass",
+      "reason": "In $KEYCHAIN.",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "secrets.photon-project-secret",
+      "section": "secrets",
+      "name": "Photon project secret",
+      "status": "pass",
+      "reason": "In $KEYCHAIN.",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "secrets.serpapi-api-key",
+      "section": "secrets",
+      "name": "SerpApi key",
+      "status": "pass",
+      "reason": "In $KEYCHAIN.",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "agent.program",
+      "section": "agent",
+      "name": "Agent program",
+      "status": "pass",
+      "reason": "Claude Code runs claude, found at /usr/local/bin/claude.",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "agent.sign-in",
+      "section": "agent",
+      "name": "Claude Code sign-in",
+      "status": "pass",
+      "reason": "Claude Code is signed in (claude.ai).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "alert.photon.node",
+      "section": "alert-channel",
+      "name": "Node.js",
+      "status": "pass",
+      "reason": "Node.js 22.11.0 at /opt/homebrew/bin/node.",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "alert.photon.sidecar",
+      "section": "alert-channel",
+      "name": "Photon sidecar",
+      "status": "pass",
+      "reason": "Found at $TMP/sidecar/photon.",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "alert.photon.dependencies",
+      "section": "alert-channel",
+      "name": "Photon sidecar dependencies",
+      "status": "pass",
+      "reason": "Installed in $TMP/sidecar/photon/node_modules.",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "alert.photon.line",
+      "section": "alert-channel",
+      "name": "Photon line",
+      "status": "pass",
+      "reason": "Photon can only message your number after you have texted your Photon line from it once.",
+      "fix": "Text your Photon line once from your phone, if you haven't yet.",
+      "details": []
+    },
+    {
+      "id": "schedule.installed",
+      "section": "schedule",
+      "name": "Schedule",
+      "status": "pass",
+      "reason": "Installed and active ($TMP/LaunchAgents/io.github.edouard38000.hackathon-radar.plist).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "schedule.binary",
+      "section": "schedule",
+      "name": "Scheduled binary",
+      "status": "pass",
+      "reason": "Scheduled Runs start this binary ($TMP/bin/hackathon-radar).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "schedule.profile",
+      "section": "schedule",
+      "name": "Scheduled Profile",
+      "status": "pass",
+      "reason": "Scheduled Runs use this Profile ($TMP/config/profile.toml).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "schedule.db",
+      "section": "schedule",
+      "name": "Scheduled database",
+      "status": "pass",
+      "reason": "Scheduled Runs use this database ($TMP/data/hackathon-radar.sqlite).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "schedule.path",
+      "section": "schedule",
+      "name": "Scheduled PATH",
+      "status": "pass",
+      "reason": "Scheduled Runs' PATH finds claude and node.",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "source.devpost",
+      "section": "sources",
+      "name": "Devpost",
+      "status": "pass",
+      "reason": "Reachable (https://devpost.com/api/hackathons?challenge_type[]=in-person&status[]=upcoming&status[]=open).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "source.mlh",
+      "section": "sources",
+      "name": "MLH",
+      "status": "pass",
+      "reason": "Reachable (https://www.mlh.com/seasons/2027/events?region=EMEA).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "source.ethglobal",
+      "section": "sources",
+      "name": "ETHGlobal",
+      "status": "pass",
+      "reason": "Reachable (https://ethglobal.com/events).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "source.cassini",
+      "section": "sources",
+      "name": "CASSINI Hackathons",
+      "status": "pass",
+      "reason": "Reachable (https://www.cassini.eu/hackathons/).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "source.dev-events",
+      "section": "sources",
+      "name": "dev.events",
+      "status": "pass",
+      "reason": "Reachable (https://dev.events/rss.xml).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "source.hackathon-be",
+      "section": "sources",
+      "name": "hackathon.be",
+      "status": "pass",
+      "reason": "Reachable (https://hackathon.be/calendar.ics).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "source.hackathonhub",
+      "section": "sources",
+      "name": "hackathonhub.eu",
+      "status": "pass",
+      "reason": "Reachable (https://hackathonhub.eu/sitemap-events.xml).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "source.luma.1",
+      "section": "sources",
+      "name": "Luma calendar cal-qyEpCltsspbMoJR",
+      "status": "pass",
+      "reason": "Reachable (https://api.lu.ma/ics/get?entity=calendar&id=cal-qyEpCltsspbMoJR).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "source.luma.2",
+      "section": "sources",
+      "name": "Luma calendar cal-QCQbg4FodJDriFO",
+      "status": "pass",
+      "reason": "Reachable (https://api.lu.ma/ics/get?entity=calendar&id=cal-QCQbg4FodJDriFO).",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "last-run",
+      "section": "last-run",
+      "name": "Last Run",
+      "status": "pass",
+      "reason": "The last Run finished 2026-11-12 09:00 UTC (24 hours ago) and succeeded.",
+      "fix": null,
+      "details": []
+    },
+    {
+      "id": "last-run.age",
+      "section": "last-run",
+      "name": "Run frequency",
+      "status": "pass",
+      "reason": "The last Run is recent for a schedule that runs every Monday and Thursday at 08:00.",
+      "fix": null,
+      "details": []
+    }
+  ]
+}

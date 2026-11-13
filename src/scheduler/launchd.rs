@@ -65,6 +65,39 @@ pub fn render_plist(job: &ScheduledRun) -> anyhow::Result<String> {
     Ok(out)
 }
 
+/// The command line and `PATH` of a plist [`render_plist`] wrote, or `None`
+/// when it has no `ProgramArguments`.
+pub fn parse_plist(text: &str) -> Option<(Vec<String>, Option<String>)> {
+    let after = |key: &str| {
+        text.find(&format!("<key>{key}</key>"))
+            .map(|at| &text[at + key.len() + 11..])
+    };
+    let args = after("ProgramArguments")?;
+    let args = &args[..args.find("</array>")?];
+    let command_line: Vec<String> = strings(args).collect();
+    if command_line.is_empty() {
+        return None;
+    }
+    let path = after("PATH").and_then(|rest| strings(rest).next());
+    Some((command_line, path))
+}
+
+/// The `<string>` values in `text`, unescaped.
+fn strings(text: &str) -> impl Iterator<Item = String> + '_ {
+    text.split("<string>")
+        .skip(1)
+        .filter_map(|piece| piece.split_once("</string>"))
+        .map(|(value, _)| xml_unescape(value))
+}
+
+fn xml_unescape(text: &str) -> String {
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
 /// launchd numbers days from Sunday = 0.
 fn launchd_weekday(day: Weekday) -> u32 {
     day.num_days_from_sunday()

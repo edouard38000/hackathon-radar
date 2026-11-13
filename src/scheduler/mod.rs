@@ -270,6 +270,63 @@ pub fn status(platform: &Platform, runner: &mut dyn CommandRunner) -> anyhow::Re
     }
 }
 
+/// What an installed schedule runs, read back from its files.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstalledRun {
+    /// The file it was read from: the plist, or the systemd service.
+    pub file: PathBuf,
+    /// The program and its arguments, as [`ScheduledRun::command_line`] wrote them.
+    pub command_line: Vec<String>,
+    /// The `PATH` each Run gets, when the file sets one.
+    pub path: Option<String>,
+}
+
+impl InstalledRun {
+    /// The binary each Run starts.
+    pub fn binary(&self) -> Option<&str> {
+        self.command_line.first().map(String::as_str)
+    }
+
+    /// The value after `flag`, such as the Profile after `--profile`.
+    pub fn flag(&self, flag: &str) -> Option<&str> {
+        self.command_line
+            .iter()
+            .position(|arg| arg == flag)
+            .and_then(|i| self.command_line.get(i + 1))
+            .map(String::as_str)
+    }
+}
+
+/// Reads back what the installed schedule runs: `Ok(None)` when its file
+/// isn't there, and an error when it can't be read or isn't one this binary
+/// wrote.
+pub fn installed_run(platform: &Platform) -> anyhow::Result<Option<InstalledRun>> {
+    let file = match platform {
+        Platform::Launchd { agents_dir, .. } => launchd::plist_path(agents_dir),
+        Platform::Systemd { unit_dir } => unit_dir.join(systemd::SERVICE),
+    };
+    let text = match std::fs::read_to_string(&file) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e).with_context(|| format!("could not read {}", file.display())),
+    };
+    let parsed = match platform {
+        Platform::Launchd { .. } => launchd::parse_plist(&text),
+        Platform::Systemd { .. } => systemd::parse_service(&text),
+    };
+    let (command_line, path) = parsed.with_context(|| {
+        format!(
+            "{} has no command line hackathon-radar can read",
+            file.display()
+        )
+    })?;
+    Ok(Some(InstalledRun {
+        file,
+        command_line,
+        path,
+    }))
+}
+
 /// Writes a scheduler file readable by everyone and writable only by its owner,
 /// as launchd requires.
 fn write_file(path: &Path, contents: &str) -> anyhow::Result<()> {

@@ -26,3 +26,8 @@ toml = "1"
 toml_edit = "0.25"
 ureq = "3"
 
+# `doctor` reads Keychain items with prompts turned off, to see what a
+# scheduled Run would see; `keyring` already builds on this crate on macOS.
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3.7"
+

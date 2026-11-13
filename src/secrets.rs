@@ -170,11 +170,39 @@ pub fn keychain_name() -> &'static str {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unavailable(pub String);
 
+/// What reading a keychain item without ever showing a prompt found, for
+/// `hackathon-radar doctor`. It never holds the value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Probe {
+    /// The item is there and readable as it is.
+    Found,
+    /// There is no such item.
+    Missing,
+    /// The item is there, but reading it needs the person to approve a
+    /// prompt: on macOS, after a rebuild changed the binary the Keychain item
+    /// trusts. A scheduled Run can't answer the prompt, so it would see the
+    /// secret as missing.
+    NeedsApproval(String),
+    /// The keychain couldn't be reached: there is none (headless Linux), it
+    /// is locked, or access was refused.
+    Unavailable(String),
+}
+
 /// The OS keychain, behind a trait so tests use a fake and never touch the real one.
 pub trait Keychain {
     /// The secret stored under `account`, or `None` when there is none.
     fn get(&self, account: &str) -> Result<Option<String>, Unavailable>;
     fn set(&self, account: &str, value: &str) -> Result<(), Unavailable>;
+
+    /// Whether the item under `account` can be read without a prompt. By
+    /// default this is [`Keychain::get`], which never prompts in a fake.
+    fn probe(&self, account: &str) -> Probe {
+        match self.get(account) {
+            Ok(Some(value)) if !value.trim().is_empty() => Probe::Found,
+            Ok(_) => Probe::Missing,
+            Err(Unavailable(why)) => Probe::Unavailable(why),
+        }
+    }
 }
 
 /// The real keychain, through the `keyring` crate: the macOS Keychain, or the
@@ -196,10 +224,52 @@ impl Keychain for OsKeychain {
             .and_then(|entry| entry.set_password(value))
             .map_err(unavailable)
     }
+
+    /// On macOS, reads with Keychain prompts turned off for this process, so
+    /// an item that would ask for approval (as a scheduled Run would meet it)
+    /// fails with "user interaction is not allowed" instead of showing a
+    /// dialog. On Linux, reading from an unlocked Secret Service collection
+    /// doesn't prompt, and a locked one is reported as unavailable.
+    fn probe(&self, account: &str) -> Probe {
+        #[cfg(target_os = "macos")]
+        let _no_prompts =
+            security_framework::os::macos::keychain::SecKeychain::disable_user_interaction().ok();
+        let entry = match keyring::Entry::new(SERVICE, account) {
+            Ok(entry) => entry,
+            Err(error) => return Probe::Unavailable(error.to_string()),
+        };
+        match entry.get_password() {
+            Ok(value) if !value.trim().is_empty() => Probe::Found,
+            Ok(_) | Err(keyring::Error::NoEntry) => Probe::Missing,
+            Err(error) if needs_approval(&error) => Probe::NeedsApproval(error.to_string()),
+            Err(error) => Probe::Unavailable(error.to_string()),
+        }
+    }
 }
 
 fn unavailable(error: keyring::Error) -> Unavailable {
     Unavailable(error.to_string())
+}
+
+/// The macOS Security framework's `errSecInteractionNotAllowed`: reading the
+/// item needs a prompt, and prompts are off.
+pub const INTERACTION_NOT_ALLOWED: i32 = -25308;
+
+/// Whether a keychain error means the item needs the person's approval.
+fn needs_approval(error: &keyring::Error) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use std::error::Error as _;
+        if let Some(inner) = error
+            .source()
+            .and_then(|inner| inner.downcast_ref::<security_framework::base::Error>())
+        {
+            return inner.code() == INTERACTION_NOT_ALLOWED;
+        }
+    }
+    let text = error.to_string().to_ascii_lowercase();
+    text.contains("interaction is not allowed")
+        || text.contains(&INTERACTION_NOT_ALLOWED.to_string())
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -213,6 +283,36 @@ pub enum SecretsError {
     Read { path: PathBuf, source: io::Error },
     #[error("{path} is not a valid secrets file: {message}")]
     Syntax { path: PathBuf, message: String },
+}
+
+/// Where a secret is, place by place; see [`Secrets::diagnose`].
+#[derive(Debug)]
+pub struct Diagnosis {
+    /// Its environment variable is set and not empty.
+    pub in_env: bool,
+    /// What the keychain said, without prompting.
+    pub keychain: Probe,
+    /// Whether the owner-only file holds it, or why the file can't be read.
+    pub in_file: Result<bool, SecretsError>,
+}
+
+/// The owner-only secrets file, as [`Secrets::file_state`] found it. Never
+/// its contents.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileState {
+    Missing,
+    /// Readable only by its owner, holding this many secrets.
+    Present {
+        mode: u32,
+        secrets: usize,
+    },
+    /// Others can read or change it, so it is refused.
+    TooOpen {
+        mode: u32,
+    },
+    /// It isn't a valid secrets file.
+    Invalid,
+    Unreadable(String),
 }
 
 /// Reads an environment variable; tests pass a fake one.
@@ -276,6 +376,53 @@ impl Secrets {
                 secret,
                 origin: Origin::File(self.file.clone()),
             }))
+    }
+
+    /// Every place the secret could come from, each checked on its own and
+    /// none read out, for `hackathon-radar doctor`: the environment variable,
+    /// the keychain without prompting, and the owner-only file.
+    pub fn diagnose(&self, name: SecretName) -> Diagnosis {
+        Diagnosis {
+            in_env: (self.env)(name.env_var())
+                .as_deref()
+                .and_then(Secret::new)
+                .is_some(),
+            keychain: self.keychain.probe(name.account()),
+            in_file: self.read_file().map(|stored| {
+                stored
+                    .get(name.account())
+                    .and_then(|value| Secret::new(value))
+                    .is_some()
+            }),
+        }
+    }
+
+    /// The owner-only file's state, for `hackathon-radar doctor`.
+    pub fn file_state(&self) -> FileState {
+        let metadata = match std::fs::metadata(&self.file) {
+            Ok(metadata) => metadata,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return FileState::Missing,
+            Err(e) => return FileState::Unreadable(e.to_string()),
+        };
+        #[cfg(unix)]
+        let mode = {
+            use std::os::unix::fs::PermissionsExt;
+            metadata.permissions().mode() & 0o7777
+        };
+        #[cfg(not(unix))]
+        let mode = {
+            let _ = metadata;
+            0o600
+        };
+        match self.read_file() {
+            Ok(stored) => FileState::Present {
+                mode,
+                secrets: stored.len(),
+            },
+            Err(SecretsError::FileTooOpen { mode, .. }) => FileState::TooOpen { mode },
+            Err(SecretsError::Syntax { .. }) => FileState::Invalid,
+            Err(SecretsError::Read { source, .. }) => FileState::Unreadable(source.to_string()),
+        }
     }
 
     /// The secret, or `None` when it isn't set anywhere.
@@ -374,5 +521,24 @@ impl Secrets {
         file.persist(path)
             .with_context(|| format!("could not write {}", path.display()))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn platform_error(message: &str) -> keyring::Error {
+        keyring::Error::PlatformFailure(Box::new(io::Error::other(message.to_owned())))
+    }
+
+    #[test]
+    fn a_read_that_needs_a_prompt_is_told_from_other_failures() {
+        assert!(needs_approval(&platform_error(
+            "User interaction is not allowed."
+        )));
+        assert!(needs_approval(&platform_error("OSStatus -25308")));
+        assert!(!needs_approval(&platform_error("The keychain is locked")));
+        assert!(!needs_approval(&keyring::Error::NoEntry));
     }
 }

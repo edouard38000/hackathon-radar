@@ -34,9 +34,15 @@ pub struct HttpClient {
 
 impl HttpClient {
     pub fn new() -> Self {
+        Self::with_timeout(Duration::from_secs(30))
+    }
+
+    /// A client whose requests give up after `timeout`, such as `doctor`'s
+    /// quick reachability checks.
+    pub fn with_timeout(timeout: Duration) -> Self {
         let agent = ureq::Agent::config_builder()
             .user_agent(USER_AGENT)
-            .timeout_global(Some(Duration::from_secs(30)))
+            .timeout_global(Some(timeout))
             .build()
             .into();
         Self { agent }
