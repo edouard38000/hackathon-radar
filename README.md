@@ -111,6 +111,53 @@ Then `hackathon-radar test-alert` checks that an Alert reaches you.
 
 **Why there's some Node here.** Everything in hackathon-radar is Rust except [`sidecar/photon/`](sidecar/photon/), because Photon only ships a TypeScript SDK ([ADR 0005](docs/adr/0005-photon-node-sidecar.md)). For each Alert, the CLI runs `node sidecar/photon/send.mjs` once, with your number and the Alert text as JSON on stdin and the two credentials in its environment; the sidecar sends one message with the SDK, prints one line of JSON and exits. Its dependencies are pinned in `package-lock.json`, and their install scripts are turned off. If you installed the binary from somewhere other than this checkout, point `HACKATHON_RADAR_PHOTON_SIDECAR_DIR` at the `sidecar/photon` directory.
 
+## Check your setup
+
+```sh
+hackathon-radar doctor                    # pass --profile and --db as for `run`
+hackathon-radar doctor --offline          # skip the network checks
+hackathon-radar doctor --send-test-alert  # also send one test Alert
+hackathon-radar doctor --json             # machine-readable, for the setup skill
+```
+
+`doctor` checks everything a Run depends on and says plainly what's wrong and how to fix it. Each check prints `pass`, `warn` or `fail` (or `skip`), a one-line reason and, when there is something to do, a one-line fix:
+
+- **Profile**: it is there, parses and is valid, with every problem listed.
+- **Secrets**: each secret your Profile needs (the Photon credentials, the ntfy token if you set one, the SerpApi key when you have a Flight budget) can be read, and from where: an environment variable, the keychain or the secrets file. Never its value. On macOS it reads the Keychain with prompts turned off, so an item a scheduled Run couldn't read (after a rebuild changed the binary the item trusts, macOS asks for approval, and a scheduled Run can't answer) fails here, with the fix: run `hackathon-radar init` again and choose Always Allow. A locked or missing keyring, which Runs quietly fall back from, is a warning, and the fallback file must be readable only by you. A custom `XDG_CONFIG_HOME` is a warning too, since scheduled Runs don't see it.
+- **Agent**: its program is on your `PATH`; Claude Code is signed in (`claude auth status`, which costs nothing); Codex has its experimental opt-in. No Agent is ever asked to judge anything.
+- **Alert channel**: ntfy's topic is set and its server answers; for Photon, Node.js 20.18.1 or later, the sidecar and its `node_modules` (else run `npm ci` in `sidecar/photon`), and a reminder to text your Photon line once. With `--send-test-alert`, one test Alert goes out as `test-alert` sends it; without it, nothing is sent.
+- **Schedule**: installed or not, and whether it starts this binary, with the same Profile and database, and a `PATH` that finds your Agent's program (and `node` for Photon). On Linux, whether linger is on.
+- **Sources**: one light, polite request to each Source a Run reads. A Source that doesn't answer is a warning, since sites go down for a while.
+- **Last Run**: when it ran, whether it succeeded and why not. If it is older than twice the longest gap in your schedule, scheduled Runs may not be firing (the Mac was off at Run time, or the schedule isn't loaded).
+
+`doctor` exits 0 when nothing failed (warnings are fine) and 1 when a check failed. `--json` prints the same results on stdout, in a shape that only changes with its `version`:
+
+```json
+{
+  "version": 1,
+  "ok": false,
+  "counts": { "pass": 23, "warn": 2, "fail": 1, "skip": 0 },
+  "checks": [
+    {
+      "id": "alert.photon.node",
+      "section": "alert-channel",
+      "name": "Node.js",
+      "status": "fail",
+      "reason": "Node.js 20.11.0 at /opt/homebrew/bin/node is older than 20.18.1, which the Photon sidecar needs.",
+      "fix": "Install Node.js 20.18.1 or later from https://nodejs.org; if Runs are scheduled, run `hackathon-radar schedule install` again afterwards.",
+      "details": []
+    }
+  ]
+}
+```
+
+- `ok` is false exactly when a check has `"status": "fail"`, which is also when the exit code is 1.
+- `counts` counts the checks by status.
+- Each check has a stable `id` (such as `profile`, `secrets.photon-project-secret`, `agent.sign-in`, `alert.ntfy.server`, `schedule.path`, `source.devpost`, `last-run.age`), its `section` (`profile`, `secrets`, `agent`, `alert-channel`, `schedule`, `sources`, `last-run`), a `name` for people, its `status` (`pass`, `warn`, `fail` or `skip`), a one-line `reason`, a one-line `fix` or `null`, and `details`: more lines when one isn't enough, such as each problem in the Profile.
+- Checks appear in the order above; which ones appear depends on the Profile (a Photon check only for Photon, a `schedule.linger` check only on Linux), and when the Profile doesn't load, the Agent, Alert channel and Sources sections are one `skip` each.
+
+Limits: the Keychain check reads as this binary, so if the schedule starts a different binary (`schedule.binary` says so), a prompt that binary would meet isn't seen. The private URLs of your own calendars stay out of the output; only their host is shown.
+
 ## Schedule
 
 `hackathon-radar schedule install` runs a Run for you every Monday and Thursday at 08:00 local time, or on the days and time in your Profile's optional `[schedule]` section (see [`examples/profile.toml`](examples/profile.toml)). On macOS it installs a launchd agent in `~/Library/LaunchAgents`; on Linux, a systemd user timer in `~/.config/systemd/user`. Each Run appends its output to `~/.local/state/hackathon-radar/run.log` (honouring `XDG_STATE_HOME`).

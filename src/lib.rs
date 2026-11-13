@@ -13,6 +13,7 @@ pub mod candidate;
 pub mod clock;
 pub mod countries;
 pub mod deadlines;
+pub mod doctor;
 pub mod export;
 pub mod fares;
 pub mod http;

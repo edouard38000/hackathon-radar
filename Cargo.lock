@@ -712,6 +712,7 @@ dependencies = [
  "keyring",
  "rpassword",
  "rusqlite",
+ "security-framework",
  "serde",
  "serde_json",
  "tempfile",

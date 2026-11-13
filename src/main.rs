@@ -47,6 +47,31 @@ enum Command {
     Export(ExportArgs),
     /// Import the personal tracker: a CSV export of its Sheet's Hackathons tab.
     ImportSheet(ImportSheetArgs),
+    /// Check everything a Run depends on, and say how to fix what's wrong. Exits 1 if a check fails.
+    Doctor(DoctorArgs),
+}
+
+#[derive(clap::Args)]
+struct DoctorArgs {
+    /// Print the results as JSON (for the setup skill) instead of text.
+    #[arg(long)]
+    json: bool,
+
+    /// Skip the checks that use the network: the ntfy server and the Sources.
+    #[arg(long, conflicts_with = "send_test_alert")]
+    offline: bool,
+
+    /// Also send one test Alert through the Profile's Alert channel.
+    #[arg(long)]
+    send_test_alert: bool,
+
+    /// The Profile file [default: ~/.config/hackathon-radar/profile.toml]
+    #[arg(long, value_name = "PATH")]
+    profile: Option<PathBuf>,
+
+    /// The database file [default: ~/.local/share/hackathon-radar/hackathon-radar.sqlite]
+    #[arg(long, value_name = "PATH")]
+    db: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -95,6 +120,7 @@ fn main() -> ExitCode {
         Command::Report(args) => report_command(args),
         Command::Export(args) => export_command(args),
         Command::ImportSheet(args) => import_sheet_command(args),
+        Command::Doctor(args) => doctor_command(args),
     };
     match result {
         Ok(code) => code,
@@ -313,6 +339,74 @@ fn test_alert_command(args: TestAlertArgs) -> anyhow::Result<ExitCode> {
         .with_context(|| format!("the test Alert through {name} was not sent"))?;
     println!("Sent a test Alert through {name}. Check your phone.");
     Ok(ExitCode::SUCCESS)
+}
+
+fn doctor_command(args: DoctorArgs) -> anyhow::Result<ExitCode> {
+    use hackathon_radar::doctor::{self, DoctorEnv, DoctorOptions};
+    use hackathon_radar::scheduler::{Platform, SystemCommandRunner};
+    use std::time::Duration;
+
+    let profile = match args.profile {
+        Some(path) => path,
+        None => paths::default_profile_path()?,
+    };
+    let db = match args.db {
+        Some(path) => path,
+        None => paths::default_database_path()?,
+    };
+    let options = DoctorOptions {
+        profile,
+        db: db.clone(),
+        log: paths::default_log_path()?,
+        offline: args.offline,
+        send_test_alert: args.send_test_alert,
+    };
+    let secrets = Secrets::system()?;
+    let env = |name: &str| std::env::var(name).ok();
+    let mut scheduler = SystemCommandRunner;
+    let platform = Platform::detect(&mut scheduler).map_err(|e| format!("{e:#}"));
+    // Quick checks: a server or Source that takes longer is reported as unreachable.
+    let quick = || HttpClient::with_timeout(Duration::from_secs(15));
+    let http = quick();
+    let sources_http = PoliteHttp::new(quick());
+    let calendars_http = PoliteHttp::new(quick()).ignoring_robots();
+    let http_post = HttpClient::new();
+    // A database that doesn't exist yet has no Runs, and isn't created.
+    let last_run = || {
+        if db.exists() {
+            Store::open(&db)?.last_run()
+        } else {
+            Ok(None)
+        }
+    };
+    let report = doctor::doctor(
+        &options,
+        DoctorEnv {
+            secrets: &secrets,
+            env: &env,
+            find_program: &doctor::which,
+            runner: &SystemRunner,
+            scheduler: &mut scheduler,
+            platform,
+            binary: std::env::current_exe().unwrap_or_default(),
+            http: &http,
+            sources_http: &sources_http,
+            calendars_http: &calendars_http,
+            http_post: &http_post,
+            sidecar: Sidecar::locate(),
+            now: chrono::Utc::now(),
+            last_run: &last_run,
+        },
+    );
+    print!(
+        "{}",
+        if args.json {
+            report.json()
+        } else {
+            report.human()
+        }
+    );
+    Ok(ExitCode::from(report.exit_code()))
 }
 
 #[derive(clap::Args)]
@@ -677,5 +771,26 @@ fn status_message(installed: bool, active: bool) -> &'static str {
         (false, false) => {
             "No schedule is installed; run `hackathon-radar schedule install` to add one."
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn the_command_line_is_well_formed() {
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn doctor_cannot_send_a_test_alert_offline() {
+        let parse = |args: &[&str]| {
+            Cli::try_parse_from(["hackathon-radar", "doctor"].iter().chain(args)).map(|_| ())
+        };
+        assert!(parse(&["--json", "--offline"]).is_ok());
+        assert!(parse(&["--send-test-alert"]).is_ok());
+        assert!(parse(&["--offline", "--send-test-alert"]).is_err());
     }
 }

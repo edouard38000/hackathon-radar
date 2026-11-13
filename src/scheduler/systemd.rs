@@ -107,6 +107,58 @@ fn exec_arg(arg: &str) -> String {
     }
 }
 
+/// The command line and `PATH` of a service [`render_service`] wrote, or
+/// `None` when it has no `ExecStart=`.
+pub fn parse_service(text: &str) -> Option<(Vec<String>, Option<String>)> {
+    let value = |key: &str| {
+        text.lines()
+            .find_map(|line| line.trim().strip_prefix(key))
+            .map(str::trim)
+    };
+    let command_line: Vec<String> = words(value("ExecStart=")?)
+        .into_iter()
+        .map(|word| word.replace("$$", "$").replace("%%", "%"))
+        .collect();
+    if command_line.is_empty() {
+        return None;
+    }
+    let path = text.lines().find_map(|line| {
+        let assignment = line.trim().strip_prefix("Environment=")?;
+        let assignment = words(assignment).into_iter().next()?.replace("%%", "%");
+        assignment.strip_prefix("PATH=").map(str::to_owned)
+    });
+    Some((command_line, path))
+}
+
+/// Splits a systemd value into words: on whitespace, except inside double
+/// quotes, where `\"` and `\\` stand for `"` and `\`.
+fn words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut chars = text.chars().peekable();
+    loop {
+        while chars.next_if(|c| c.is_whitespace()).is_some() {}
+        let Some(&first) = chars.peek() else {
+            return words;
+        };
+        let mut word = String::new();
+        if first == '"' {
+            chars.next();
+            while let Some(c) = chars.next() {
+                match c {
+                    '"' => break,
+                    '\\' => word.extend(chars.next()),
+                    c => word.push(c),
+                }
+            }
+        } else {
+            while let Some(c) = chars.next_if(|c| !c.is_whitespace()) {
+                word.push(c);
+            }
+        }
+        words.push(word);
+    }
+}
+
 fn unit_paths(unit_dir: &Path) -> [PathBuf; 2] {
     [unit_dir.join(SERVICE), unit_dir.join(TIMER)]
 }

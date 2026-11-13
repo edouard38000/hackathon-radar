@@ -111,6 +111,11 @@ impl Store {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
+    /// The most recently recorded Run, if any.
+    pub fn last_run(&self) -> anyhow::Result<Option<RunRecord>> {
+        Ok(self.runs()?.pop())
+    }
+
     /// The failed Runs recorded since the last Run that succeeded.
     pub fn failed_streak(&self) -> anyhow::Result<FailedStreak> {
         Ok(self.conn.query_row(

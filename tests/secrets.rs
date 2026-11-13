@@ -6,7 +6,9 @@ mod support;
 
 use std::path::Path;
 
-use hackathon_radar::secrets::{Found, Origin, Secret, SecretName, SecretsError, Stored};
+use hackathon_radar::secrets::{
+    FileState, Found, Keychain, Origin, Probe, Secret, SecretName, SecretsError, Stored,
+};
 use support::*;
 
 const KEY: &str = "serp_test_key_0123456789";
@@ -232,6 +234,62 @@ fn debug_output_never_shows_a_secret() {
         assert!(!debug.contains(KEY), "{debug}");
         assert!(debug.contains("[redacted]"), "{debug}");
     }
+}
+
+#[test]
+fn a_keychain_probe_says_whether_an_item_is_there_without_its_value() {
+    let keychain = FakeKeychain::default().with("serpapi-api-key", KEY);
+    assert_eq!(keychain.probe("serpapi-api-key"), Probe::Found);
+    assert_eq!(keychain.probe("ntfy-token"), Probe::Missing);
+    assert_eq!(
+        FakeKeychain::unavailable().probe("serpapi-api-key"),
+        Probe::Unavailable("no keychain on this machine".into())
+    );
+}
+
+#[test]
+fn a_diagnosis_checks_every_place_on_its_own() {
+    let dir = tempfile::tempdir().unwrap();
+    let keychain = FakeKeychain::default().with("serpapi-api-key", KEY);
+    let secrets = secrets_in(&keychain, dir.path(), &[("SERPAPI_API_KEY", "from_env")]);
+    assert_eq!(secrets.file_state(), FileState::Missing);
+    secrets
+        .store(SecretName::NtfyToken, &secret("tk_x"))
+        .unwrap();
+    let diagnosis = secrets.diagnose(SecretName::SerpApiKey);
+
+    assert!(diagnosis.in_env);
+    assert_eq!(diagnosis.keychain, Probe::Found);
+    assert!(!diagnosis.in_file.unwrap());
+
+    let secrets = secrets_in(&FakeKeychain::unavailable(), dir.path(), &[]);
+    secrets.store(SecretName::SerpApiKey, &secret(KEY)).unwrap();
+    let diagnosis = secrets.diagnose(SecretName::SerpApiKey);
+    assert!(!diagnosis.in_env);
+    assert!(matches!(diagnosis.keychain, Probe::Unavailable(_)));
+    assert!(diagnosis.in_file.unwrap());
+    assert!(matches!(
+        secrets.file_state(),
+        FileState::Present { secrets: 1, .. }
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_file_others_can_read_is_reported_as_too_open() {
+    let dir = tempfile::tempdir().unwrap();
+    let secrets = secrets_in(&FakeKeychain::unavailable(), dir.path(), &[]);
+    secrets.store(SecretName::SerpApiKey, &secret(KEY)).unwrap();
+    assert_eq!(
+        secrets.file_state(),
+        FileState::Present {
+            mode: 0o600,
+            secrets: 1
+        }
+    );
+    chmod(secrets.file(), 0o640);
+    assert_eq!(secrets.file_state(), FileState::TooOpen { mode: 0o640 });
+    assert!(secrets.diagnose(SecretName::SerpApiKey).in_file.is_err());
 }
 
 #[test]
