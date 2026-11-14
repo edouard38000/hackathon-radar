@@ -2,18 +2,26 @@
 
 A self-hosted hackathon tracker. An AI agent running on your own machine finds hackathons that fit where you live and what you care about, tracks application deadlines, and texts you when something new or travel-funded appears.
 
+**Personal use only.** hackathon-radar reads public hackathon listings whose terms vary by Source. Respect those terms and do not redistribute collected data ([ADR 0001](docs/adr/0001-self-hosted-only.md)).
+
+## Quick start
+
+Install the archive for your platform from [GitHub Releases](https://github.com/edouard38000/hackathon-radar/releases), keeping its `sidecar/` folder next to the binary, or install from crates.io with `cargo install hackathon-radar --locked` (Rust 1.88 or later). Then open this repo in Claude Code or Codex and say **"set me up"**: [Set up](#set-up) explains the setup skill. Claude Code is recommended; the Codex adapter for Runs requires an experimental opt-in.
+
+See the [setup guide](docs/setup-guide.md) for install details, costs, Photon caveats, updating and uninstalling.
+
 > **Status:** early development. Runs read the global Sources (Devpost, MLH, ETHGlobal, the CASSINI Hackathons, dev.events), the Source pack for your Home (Europe or North America) and your own ICS calendars, merge Duplicate listings, and send Alerts by iMessage through Photon, or through ntfy.
 
 ## Principles
 
 - **Self-hosted only.** Everything runs and stays on your machine. There is no hosted service.
 - **Bring your own agent and messaging.** You run your own AI agent and your own iMessage line (Photon).
-- **Personal use only.** It reads public hackathon listings for your own tracking. Respect each source's terms of use.
+- **Personal use only.** It reads public hackathon listings for your own tracking. Respect each Source's terms of use and do not redistribute collected data.
 - **Rust first** wherever the platform allows.
 
 ## Set up
 
-Open this repo in Claude Code (or Codex) and say "set me up". Your coding agent then follows the setup skill in [`.claude/skills/setup-hackathon-radar/SKILL.md`](.claude/skills/setup-hackathon-radar/SKILL.md): it checks what you have installed, builds and installs the binary, asks you about your Home, Countries, budget, Themes, Agent and Alert channel, runs `hackathon-radar init` and `hackathon-radar doctor` for you, explains anything that needs fixing, and finishes once a test Alert has reached your phone. It never asks for your keys in the chat: you type them into `init`'s hidden prompts in your own terminal, and they go to your keychain. Claude Code picks the skill up on its own; Codex and other agents are pointed at it by [`AGENTS.md`](AGENTS.md).
+Open this repo in Claude Code (or Codex) and say "set me up". Your coding agent then follows the setup skill in [`.claude/skills/setup-hackathon-radar/SKILL.md`](.claude/skills/setup-hackathon-radar/SKILL.md): it checks what you have installed, installs a release binary or uses `cargo install`, asks you about your Home, Countries, budget, Themes, Agent and Alert channel, runs `hackathon-radar init` and `hackathon-radar doctor` for you, explains anything that needs fixing, and finishes once a test Alert has reached your phone. It never asks for your keys in the chat: you type them into `init`'s hidden prompts in your own terminal, and they go to your keychain. Claude Code picks the skill up on its own; Codex and other agents are pointed at it by [`AGENTS.md`](AGENTS.md).
 
 ### Setting up by hand
 
@@ -99,10 +107,10 @@ Your Profile is a small TOML file with your Home, Countries, currency, Themes, E
 
 1. Sign up at [app.photon.codes](https://app.photon.codes), create a project and turn on iMessage (Spectrum). Note the project's ID and secret, and the iMessage line Photon gives you.
 2. **Text your Photon line once from your phone**, with anything. A shared (free-tier) line can only message a number that has texted it first; until you do, sends fail with "Photon won't message … yet".
-3. Install [Node.js](https://nodejs.org) 20.18.1 or later, then install the sidecar's pinned dependencies once:
+3. Install [Node.js](https://nodejs.org) 20.18.1 or later. After selecting Photon in `init`, run `hackathon-radar doctor --offline`: its `alert.photon.sidecar` and `alert.photon.dependencies` checks name the resolved directory. Install the sidecar's pinned dependencies there once (replace the example path with that directory):
 
    ```sh
-   cd sidecar/photon && npm ci
+   cd "/path/reported/by/doctor" && npm ci
    ```
 
 4. Put your number in the Profile (E.164 format, or a Photon space ID), and store your project's ID and secret in your keychain with `hackathon-radar init` (or set `PHOTON_PROJECT_ID` and `PHOTON_PROJECT_SECRET` in the environment). They never go in the Profile.
@@ -115,7 +123,7 @@ Your Profile is a small TOML file with your Home, Countries, currency, Themes, E
 
 Then `hackathon-radar test-alert` checks that an Alert reaches you.
 
-**Why there's some Node here.** Everything in hackathon-radar is Rust except [`sidecar/photon/`](sidecar/photon/), because Photon only ships a TypeScript SDK ([ADR 0005](docs/adr/0005-photon-node-sidecar.md)). For each Alert, the CLI runs `node sidecar/photon/send.mjs` once, with your number and the Alert text as JSON on stdin and the two credentials in its environment; the sidecar sends one message with the SDK, prints one line of JSON and exits. Its dependencies are pinned in `package-lock.json`, and their install scripts are turned off. If you installed the binary from somewhere other than this checkout, point `HACKATHON_RADAR_PHOTON_SIDECAR_DIR` at the `sidecar/photon` directory.
+**Why there's some Node here.** Everything in hackathon-radar is Rust except [`sidecar/photon/`](sidecar/photon/), because Photon only ships a TypeScript SDK ([ADR 0005](docs/adr/0005-photon-node-sidecar.md)). For each Alert, the CLI runs `node` with `send.mjs` in the resolved sidecar directory, with your number and the Alert text as JSON on stdin and the two credentials in its environment; the sidecar sends one message with the SDK, prints one line of JSON and exits. Its dependencies are pinned in `package-lock.json`, and their install scripts are turned off. A non-empty `HACKATHON_RADAR_PHOTON_SIDECAR_DIR` always overrides automatic lookup, even if the sidecar is missing; see the [setup guide](docs/setup-guide.md#photon-and-ntfy) for the full lookup order. With `cargo install` from crates.io, keep that packaged source copy available and run `npm ci` in the directory `doctor` names.
 
 ## Check your setup
 
@@ -131,7 +139,7 @@ hackathon-radar doctor --json             # machine-readable, for the setup skil
 - **Profile**: it is there, parses and is valid, with every problem listed.
 - **Secrets**: each secret your Profile needs (the Photon credentials, the ntfy token if you set one, the SerpApi key when you have a Flight budget) can be read, and from where: an environment variable, the keychain or the secrets file. Never its value. On macOS it reads the Keychain with prompts turned off, so an item a scheduled Run couldn't read (after a rebuild changed the binary the item trusts, macOS asks for approval, and a scheduled Run can't answer) fails here, with the fix: run `hackathon-radar init` again and choose Always Allow. A locked or missing keyring, which Runs quietly fall back from, is a warning, and the fallback file must be readable only by you. A custom `XDG_CONFIG_HOME` is a warning too, since scheduled Runs don't see it.
 - **Agent**: its program is on your `PATH`; Claude Code is signed in (`claude auth status`, which costs nothing); Codex has its experimental opt-in. No Agent is ever asked to judge anything.
-- **Alert channel**: ntfy's topic is set and its server answers; for Photon, Node.js 20.18.1 or later, the sidecar and its `node_modules` (else run `npm ci` in `sidecar/photon`), and a reminder to text your Photon line once. With `--send-test-alert`, one test Alert goes out as `test-alert` sends it; without it, nothing is sent.
+- **Alert channel**: ntfy's topic is set and its server answers; for Photon, Node.js 20.18.1 or later, the sidecar and its `node_modules` (else run `npm ci` in the resolved directory the check names), and a reminder to text your Photon line once. With `--send-test-alert`, one test Alert goes out as `test-alert` sends it; without it, nothing is sent.
 - **Schedule**: installed or not, and whether it starts this binary, with the same Profile and database, and a `PATH` that finds your Agent's program (and `node` for Photon). On Linux, whether linger is on.
 - **Sources**: one light, polite request to each Source a Run reads. A Source that doesn't answer is a warning, since sites go down for a while.
 - **Last Run**: when it ran, whether it succeeded and why not. If it is older than twice the longest gap in your schedule, scheduled Runs may not be firing (the Mac was off at Run time, or the schedule isn't loaded).

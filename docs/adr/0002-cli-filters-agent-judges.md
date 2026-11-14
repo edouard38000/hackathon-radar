@@ -4,5 +4,5 @@ Each Run is split in two. The Rust CLI does everything deterministic: it fetches
 
 ## Consequences
 
-- **Fares come from the CLI, not the agent.** The CLI queries Google Flights prices through the person's own SerpApi key (its free tier covers about 175 lookups a month). The airline and GDS APIs are closed to individuals: Amadeus Self-Service shut down in July 2026, Kiwi Tequila is invite-only, Skyscanner refuses non-commercial users, and Duffel needs a business. Without a key, the agent estimates the fare from web search and the CLI stores it as an Unverified fare.
+- **Fares come from the CLI, not the agent.** The CLI queries Google Flights prices through the person's own SerpApi key (its free tier covers 250 searches a month). The airline and GDS APIs are closed to individuals: Amadeus Self-Service shut down in July 2026, Kiwi Tequila is invite-only, Skyscanner refuses non-commercial users, and Duffel needs a business. Without a key, the agent estimates the fare from web search and the CLI stores it as an Unverified fare.
 - **Train times and nearest airports** are estimated by the agent once per destination city, cached per Home, and correctable by the person.

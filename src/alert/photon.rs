@@ -6,7 +6,8 @@
 //! the recipient and text as JSON on stdin and the project credentials in its
 //! environment. It sends one message, prints one line of JSON and exits.
 
-use std::path::PathBuf;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::{fmt, io};
 
@@ -110,12 +111,42 @@ impl Sidecar {
         }
     }
 
-    /// [`SIDECAR_DIR_ENV_VAR`] when it is set, or else the bundled copy.
+    /// Prefer an explicit override, then the release's copy beside the real
+    /// executable (including installs using a symlink), then this source tree.
     pub fn locate() -> Self {
-        match std::env::var_os(SIDECAR_DIR_ENV_VAR) {
-            Some(dir) if !dir.is_empty() => Self { dir: dir.into() },
-            _ => Self::bundled(),
+        let override_dir = std::env::var_os(SIDECAR_DIR_ENV_VAR);
+        let executable = std::env::current_exe()
+            .ok()
+            .and_then(|path| path.canonicalize().ok());
+        Self::locate_from(override_dir.as_deref(), executable.as_deref(), |path| {
+            path.is_file()
+        })
+    }
+
+    /// Pure lookup with an already resolved executable path. Honour an explicit
+    /// override even when missing so diagnostics name the person's setting.
+    /// Otherwise probe for the entry point, retaining the source-tree fallback
+    /// even when missing so callers keep their existing diagnostics.
+    fn locate_from(
+        override_dir: Option<&OsStr>,
+        executable: Option<&Path>,
+        file_exists: impl Fn(&Path) -> bool,
+    ) -> Self {
+        if let Some(dir) = override_dir.filter(|dir| !dir.is_empty()) {
+            return Self { dir: dir.into() };
         }
+        let beside_executable = executable.and_then(Path::parent);
+        let candidates = [
+            beside_executable.map(|dir| dir.join("sidecar/photon")),
+            beside_executable.map(|dir| dir.join("../share/hackathon-radar/sidecar/photon")),
+            Some(Self::bundled().dir),
+        ];
+        let dir = candidates
+            .into_iter()
+            .flatten()
+            .find(|dir| file_exists(&dir.join(SCRIPT)))
+            .unwrap_or_else(|| Self::bundled().dir);
+        Self { dir }
     }
 
     pub fn script(&self) -> PathBuf {
@@ -315,4 +346,123 @@ fn tail(text: &str) -> String {
         return text.to_owned();
     }
     format!("…{}", chars[chars.len() - 500..].iter().collect::<String>())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn locate(override_dir: Option<&str>, executable: Option<&str>, files: &[&Path]) -> Sidecar {
+        Sidecar::locate_from(
+            override_dir.map(OsStr::new),
+            executable.map(Path::new),
+            |path| files.contains(&path),
+        )
+    }
+
+    #[test]
+    fn override_wins_over_release_and_source_tree() {
+        let sidecar = locate(
+            Some("/custom"),
+            Some("/opt/radar/hackathon-radar"),
+            &[
+                Path::new("/custom/send.mjs"),
+                Path::new("/opt/radar/sidecar/photon/send.mjs"),
+                &Sidecar::bundled().script(),
+            ],
+        );
+        assert_eq!(sidecar.dir, Path::new("/custom"));
+    }
+
+    #[test]
+    fn missing_override_is_honoured_without_probing_other_copies() {
+        let sidecar = Sidecar::locate_from(
+            Some(OsStr::new("/missing")),
+            Some(Path::new("/opt/radar/hackathon-radar")),
+            |_| panic!("an explicit override must not probe for send.mjs"),
+        );
+        assert_eq!(sidecar.dir, Path::new("/missing"));
+        assert_eq!(sidecar.script(), Path::new("/missing/send.mjs"));
+    }
+
+    #[test]
+    fn absent_or_empty_override_uses_copy_beside_executable() {
+        for override_dir in [None, Some("")] {
+            let sidecar = locate(
+                override_dir,
+                Some("/opt/radar/hackathon-radar"),
+                &[
+                    Path::new("/opt/radar/sidecar/photon/send.mjs"),
+                    Path::new("/opt/radar/../share/hackathon-radar/sidecar/photon/send.mjs"),
+                    &Sidecar::bundled().script(),
+                ],
+            );
+            assert_eq!(sidecar.dir, Path::new("/opt/radar/sidecar/photon"));
+        }
+    }
+
+    #[test]
+    fn shared_install_is_used_before_source_tree() {
+        let sidecar = locate(
+            None,
+            Some("/usr/local/bin/hackathon-radar"),
+            &[
+                Path::new("/usr/local/bin/../share/hackathon-radar/sidecar/photon/send.mjs"),
+                &Sidecar::bundled().script(),
+            ],
+        );
+        assert_eq!(
+            sidecar.dir,
+            Path::new("/usr/local/bin/../share/hackathon-radar/sidecar/photon")
+        );
+    }
+
+    #[test]
+    fn source_tree_is_used_when_release_copies_are_missing() {
+        assert_eq!(
+            locate(
+                None,
+                Some("/opt/radar/hackathon-radar"),
+                &[&Sidecar::bundled().script()]
+            ),
+            Sidecar::bundled()
+        );
+    }
+
+    #[test]
+    fn unavailable_executable_still_allows_override_or_source_tree() {
+        assert_eq!(
+            locate(Some("/custom"), None, &[Path::new("/custom/send.mjs")]).dir,
+            Path::new("/custom")
+        );
+        assert_eq!(
+            locate(None, None, &[&Sidecar::bundled().script()]),
+            Sidecar::bundled()
+        );
+    }
+
+    #[test]
+    fn missing_everywhere_retains_source_tree_for_error_messages() {
+        assert_eq!(
+            locate(None, Some("/missing/binary"), &[]),
+            Sidecar::bundled()
+        );
+        assert_eq!(locate(None, None, &[]), Sidecar::bundled());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_executable_finds_release_copy_in_real_directory() {
+        let install = tempfile::tempdir().unwrap();
+        let executable = install.path().join("release/hackathon-radar");
+        let sidecar = install.path().join("release/sidecar/photon");
+        std::fs::create_dir_all(&sidecar).unwrap();
+        std::fs::write(&executable, "").unwrap();
+        std::fs::write(sidecar.join(SCRIPT), "").unwrap();
+        let link = install.path().join("hackathon-radar");
+        std::os::unix::fs::symlink(&executable, &link).unwrap();
+        let resolved = link.canonicalize().unwrap();
+        let located = Sidecar::locate_from(None, Some(&resolved), |path| path.is_file());
+        assert_eq!(located.dir, sidecar.canonicalize().unwrap());
+    }
 }
