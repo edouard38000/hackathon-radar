@@ -13,6 +13,12 @@ A self-hosted hackathon tracker. An AI agent running on your own machine finds h
 
 ## Set up
 
+Open this repo in Claude Code (or Codex) and say "set me up". Your coding agent then follows the setup skill in [`.claude/skills/setup-hackathon-radar/SKILL.md`](.claude/skills/setup-hackathon-radar/SKILL.md): it checks what you have installed, builds and installs the binary, asks you about your Home, Countries, budget, Themes, Agent and Alert channel, runs `hackathon-radar init` and `hackathon-radar doctor` for you, explains anything that needs fixing, and finishes once a test Alert has reached your phone. It never asks for your keys in the chat: you type them into `init`'s hidden prompts in your own terminal, and they go to your keychain. Claude Code picks the skill up on its own; Codex and other agents are pointed at it by [`AGENTS.md`](AGENTS.md).
+
+### Setting up by hand
+
+Without a coding agent, install the binary (`cargo install --path . --locked` from this checkout) and run:
+
 ```sh
 hackathon-radar init
 ```
@@ -259,7 +265,7 @@ cargo test
 (cd sidecar/photon && npm ci && npm test)   # the Photon sidecar
 ```
 
-Tests never touch the network or your keychain: Sources read saved fixtures from `tests/fixtures/`, no test runs a real Agent, no test reaches Photon, and secrets go to a fake keychain. The Photon channel's Rust tests and the sidecar's own tests (with a fake Photon SDK) check the same recorded sidecar outputs in `tests/fixtures/photon/`.
+Tests never touch the network or your keychain: Sources read saved fixtures from `tests/fixtures/`, no test runs a real Agent, no test reaches Photon, and secrets go to a fake keychain. The Photon channel's Rust tests and the sidecar's own tests (with a fake Photon SDK) check the same recorded sidecar outputs in `tests/fixtures/photon/`. `tests/setup_skill.rs` keeps the setup skill in step with the CLI: every flag it mentions must exist, every `init` question must have its flag in it, no secret may go on a command line, and its example `init` commands are run against a fake machine.
 
 ## License
 
