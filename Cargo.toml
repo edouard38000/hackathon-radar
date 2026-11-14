@@ -6,9 +6,18 @@ rust-version = "1.88"
 description = "A self-hosted tracker that finds hackathons that fit you and alerts you about them."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/edouard38000/hackathon-radar"
+homepage = "https://github.com/edouard38000/hackathon-radar"
+documentation = "https://github.com/edouard38000/hackathon-radar/blob/main/docs/setup-guide.md"
 readme = "README.md"
 keywords = ["hackathon", "tracker", "cli", "self-hosted"]
 categories = ["command-line-utilities"]
+include = [
+    "/Cargo.toml", "/Cargo.lock", "/src/**", "/README.md", "/LICENSE-*",
+    "/GLOSSARY.md", "/docs/adr/**", "/docs/setup-guide.md", "/examples/profile.toml",
+    "/.claude/skills/setup-hackathon-radar/SKILL.md",
+    "/sidecar/photon/package.json", "/sidecar/photon/package-lock.json",
+    "/sidecar/photon/*.mjs", "/sidecar/photon/.npmrc",
+]
 
 [dependencies]
 anyhow = "1"

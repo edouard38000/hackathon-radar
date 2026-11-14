@@ -35,24 +35,38 @@ command -v codex
 
 Tell the person, in plain words, what is there and what is missing:
 
-- **Rust (cargo).** There are no prebuilt binaries yet, so hackathon-radar is built from this repo with Rust 1.88 or later. If `cargo` is missing, they can install Rust from https://rustup.rs (ask before you run the installer for them).
+- **Install options.** Offer a [release archive](https://github.com/edouard38000/hackathon-radar/releases) first (no Rust needed), `cargo install --locked hackathon-radar` second, or a build from this checkout third. The Cargo options need Rust 1.88 or later. If `cargo` is missing, explain that the release archive avoids installing Rust; they can instead install Rust from https://rustup.rs (ask before you run the installer for them). If no release or crate has been published yet, use the checkout option when Rust is available.
 - **An Agent: `claude` or `codex`.** Each Run asks the person's own Agent to judge listings, so one of them must be on their `PATH`. Claude Code is the default and the recommended one. Codex works but is experimental (step 3). Being inside Claude Code or Codex right now doesn't count: Runs call the `claude` or `codex` program.
 - **Node.js** is only needed for Photon Alerts; it's checked in step 5 if they choose Photon.
 
 If `hackathon-radar` is already installed and `~/.config/hackathon-radar/profile.toml` exists, this is a re-run: read the Profile, show them their current answers, and ask only what they want to change. `init` keeps every answer it isn't given a flag for, and any section it doesn't ask about.
 
-## 2. Build and install the binary
+## 2. Install the binary
 
-From the repo root:
+Keep an already installed binary unless the person wants an update. Otherwise offer these options in order; say which one you are about to use:
+
+1. **Release archive:** download the archive and `.sha256` for their macOS or Linux architecture from [GitHub Releases](https://github.com/edouard38000/hackathon-radar/releases), verify the checksum, and extract it under `~/.local/opt/`. Keep the resulting `hackathon-radar-<version>-<target>/` directory intact, and symlink its `hackathon-radar` executable into `~/.local/bin/` on PATH. Follow the [setup guide](../../../docs/setup-guide.md#release-archive-no-rust-needed) for the extraction and symlink commands and the macOS quarantine note.
+2. **crates.io:** with Rust 1.88 or later:
+
+   ```sh
+   cargo install --locked hackathon-radar
+   ```
+
+3. **Build from this checkout:** from the repo root:
 
 ```sh
 cargo install --path . --locked
+```
+
+Then check the installed binary:
+
+```sh
 hackathon-radar --version
 ```
 
-It goes in `~/.cargo/bin`. If `hackathon-radar --version` isn't found, `~/.cargo/bin` isn't on their `PATH` yet (rustup normally adds it; a new terminal picks it up). Use the installed `hackathon-radar` from here on, not `cargo run` or a `target/` build: the schedule runs the binary it was installed from, and on macOS the Keychain trusts that binary.
+Cargo installs go in `~/.cargo/bin`. If `hackathon-radar --version` isn't found, add its install directory to their PATH (rustup normally adds `~/.cargo/bin`; a new terminal picks it up). Use the installed `hackathon-radar` from here on, not `cargo run` or a `target/` build: the schedule runs the binary it was installed from, and on macOS the Keychain trusts that binary.
 
-Ask them to keep this checkout where it is: the installed binary finds the Photon sidecar in its `sidecar/photon` directory. After pulling updates, run `cargo install` again; on macOS the Keychain may then want approval for the new binary, which `doctor` reports (step 6).
+Photon finds its sidecar next to the binary for a release archive, or in the source tree for a Cargo install; `init` and `doctor` name the directory, so run `npm ci` there.
 
 ## 3. Interview for the Profile
 
@@ -154,10 +168,10 @@ Walk them through these before giving them the `init` command, and check each on
 1. **Sign up** at https://app.photon.codes, create a project and turn on iMessage (Spectrum). The dashboard shows the project's ID and secret: they stay there until `init` asks for them, not in this chat. Note the iMessage line (phone number) Photon gives them.
 2. **Text that Photon line once from their phone**, with anything. A shared (free) line can only message a number that has texted it first; until they do, sends fail with "Photon won't message … yet".
 3. **Node.js 20.18.1 or later.** Check with `node --version` and `command -v npm`. If it's missing or older, ask before installing it (from https://nodejs.org or their package manager).
-4. **`npm ci` in `sidecar/photon`.** `init` runs it for them (the dependencies are pinned and their install scripts are off). If `init` said npm wasn't on the `PATH` or `npm ci` failed, run it yourself from the repo root once Node.js is there:
+4. **`npm ci` in the resolved sidecar directory.** `init` runs it for them and names that directory (the dependencies are pinned and their install scripts are off). If `init` said npm wasn't on the PATH or `npm ci` failed, run `hackathon-radar doctor --offline` after Photon is selected in the Profile. Its `alert.photon.sidecar` and `alert.photon.dependencies` checks name the resolved directory. Once Node.js is there, replace the example path below with that exact directory and run:
 
    ```sh
-   (cd sidecar/photon && npm ci)
+   (cd "/path/reported/by/doctor" && npm ci)
    ```
 
 ### ntfy (no account)
