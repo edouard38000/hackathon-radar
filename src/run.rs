@@ -81,6 +81,9 @@ pub struct RunOutcome {
     pub rechecked: usize,
     /// Why the Agent's recheck failed this Run, if it did; those Hackathons are due again.
     pub recheck_failure: Option<String>,
+    /// How many Theme answers this Run's judging and rechecks normalised
+    /// rather than took as given (ADR 0010).
+    pub themes_normalised: usize,
     /// How many Fares were looked up, or estimated by the Agent, on this Run.
     pub fares_looked_up: usize,
     /// How many flights wait for a Fare; they are held back from Alerts until they have one.
@@ -250,6 +253,7 @@ fn run_steps(
         waiting_on_duplicates: merged.waiting,
         rechecked: rechecked.rechecked,
         recheck_failure: rechecked.failure,
+        themes_normalised: judged.themes_normalised + rechecked.themes_normalised,
         fares_looked_up: priced.looked_up,
         waiting_on_fares: priced.waiting(),
         over_budget: priced.over_budget(),

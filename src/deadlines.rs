@@ -53,6 +53,9 @@ pub struct Rechecked {
     pub waiting: usize,
     /// Why the Agent's recheck failed, if it did; those Hackathons are due again next Run.
     pub failure: Option<String>,
+    /// How many of the recheck's Theme answers were normalised rather than
+    /// taken as given ([`agent::ReadAnswer`]).
+    pub themes_normalised: usize,
 }
 
 /// Stores `closed` for every passed deadline, then rechecks the known
@@ -105,14 +108,15 @@ pub fn recheck(
     let answer = agent
         .judge(&request)
         .map_err(|e| format!("{e:#}"))
-        .and_then(|answer| request.read_judgements(&answer).map_err(|e| e.to_string()));
-    let judged = match answer {
-        Ok(judged) => judged,
+        .and_then(|answer| request.read_answer(&answer).map_err(|e| e.to_string()));
+    let (judged, themes_normalised) = match answer {
+        Ok(read) => (read.judgements, read.themes_normalised),
         Err(error) => {
             return Ok(Rechecked {
                 rechecked: 0,
                 waiting: due.len(),
                 failure: Some(error),
+                themes_normalised: 0,
             });
         }
     };
@@ -136,6 +140,7 @@ pub fn recheck(
         rechecked: judged.len(),
         waiting: due.len() - judged.len(),
         failure: None,
+        themes_normalised,
     })
 }
 

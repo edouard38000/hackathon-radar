@@ -180,6 +180,46 @@ fn an_answer_about_other_themes_counts_as_fitting_until_rechecked_with_the_new_o
 }
 
 #[test]
+fn sloppy_theme_answers_are_normalised_so_the_whole_batch_is_still_judged() {
+    let mut harness = Harness::new(themed_profile(&["Belgium"], &["climate", "AI agents"]));
+    harness.agent = FakeAgent::approving()
+        // A near-miss Theme: counts as open-themed, with no Theme line.
+        .with_sloppy_theme(LIEGE, "on_theme", Some("AI"))
+        // Off-Theme naming a Theme anyway: stays off-Theme.
+        .with_sloppy_theme(ODOO, "off_theme", Some("climate"))
+        // Open-themed naming a Theme: stays open-themed, the Theme dropped.
+        .with_sloppy_theme("MoMu Hackathon", "open_themed", Some("climate"));
+
+    let outcome = harness.run(&[hackathon_be_from_fixture()], date(2026, 11, 9), LIVE_RUN);
+
+    assert_eq!(outcome.agent_failure, None);
+    assert_eq!(outcome.judged, 5, "every Candidate in the batch is judged");
+    assert!(harness.unjudged_names().is_empty(), "none stays queued");
+    assert_eq!(outcome.themes_normalised, 3);
+    assert_eq!(names(&outcome), without(ODOO));
+    assert_eq!(
+        theme_answer(&harness, LIEGE).map(|a| a.fit),
+        Some(ThemeFit::OpenThemed),
+        "the unknown Theme isn't stored"
+    );
+    let alert = &harness.channel.sent[0].text;
+    assert!(!alert.contains("Theme:"), "{alert}");
+    assert!(!alert.contains("Odoo"), "{alert}");
+}
+
+#[test]
+fn a_clean_run_normalises_nothing() {
+    let mut harness = Harness::new(themed_profile(&["Belgium"], &["health"]));
+    harness.agent =
+        FakeAgent::approving().with_theme_fit(LIEGE, ThemeFit::OnTheme("health".into()));
+
+    let outcome = harness.run(&[hackathon_be_from_fixture()], date(2026, 11, 9), DRY_RUN);
+
+    assert_eq!(outcome.themes_normalised, 0);
+    assert_eq!(names(&outcome), all());
+}
+
+#[test]
 fn an_answer_without_the_theme_question_is_rejected_and_its_candidates_wait() {
     let mut harness = Harness::new(themed_profile(&["Belgium"], &["climate"]));
     // A judgement in the old shape, with no Theme answer.

@@ -249,10 +249,17 @@ impl<'a> JudgeRequest<'a> {
         &self,
         answer: &str,
     ) -> Result<Vec<(&'a Candidate, Judgement)>, InvalidOutput> {
+        self.read_answer(answer).map(|read| read.judgements)
+    }
+
+    /// [`JudgeRequest::read_judgements`], also counting the Theme answers it
+    /// normalised ([`ReadAnswer::themes_normalised`]).
+    pub fn read_answer(&self, answer: &str) -> Result<ReadAnswer<'a>, InvalidOutput> {
         let answer: AnswerFile =
             serde_json::from_str(answer.trim()).map_err(|e| InvalidOutput(e.to_string()))?;
         let mut seen = HashSet::new();
         let mut judged = Vec::new();
+        let mut themes_normalised = 0;
         for item in answer.judgements {
             let sent = self
                 .candidates
@@ -270,7 +277,10 @@ impl<'a> JudgeRequest<'a> {
                     item.id
                 )));
             }
-            let theme = self.read_theme(&item)?;
+            let (theme, normalised) = self.read_theme(&item)?;
+            if normalised {
+                themes_normalised += 1;
+            }
             let deadline = match non_empty(item.application_deadline) {
                 None => None,
                 Some(text) => Some(NaiveDate::parse_from_str(&text, "%Y-%m-%d").map_err(
@@ -297,22 +307,28 @@ impl<'a> JudgeRequest<'a> {
                 },
             ));
         }
-        Ok(judged)
+        Ok(ReadAnswer {
+            judgements: judged,
+            themes_normalised,
+        })
     }
 
-    /// The judgement's answer to the Theme question, which it must give when
-    /// the request asks it and mustn't give otherwise. An on-Theme answer must
-    /// name one of the Themes asked (ignoring case), and is kept as the
-    /// Profile spells it; any other answer names none.
-    fn read_theme(&self, item: &AnswerItem) -> Result<Option<ThemeAnswer>, InvalidOutput> {
-        let id = &item.id;
+    /// The judgement's answer to the Theme question, and whether it had to be
+    /// normalised. The Theme fields must be there when the request asks about
+    /// Themes, as the schema requires; otherwise the answer is rejected. What
+    /// they say is normalised rather than rejected, so one sloppy answer can't
+    /// hold back a whole batch Run after Run (ADR 0010):
+    /// - an on-Theme answer naming one of the Themes asked (ignoring case) is
+    ///   kept, as the Profile spells it;
+    /// - an on-Theme answer naming no Theme, or one the person doesn't have,
+    ///   counts as open-themed, and the unknown Theme isn't kept;
+    /// - an open-themed or off-Theme answer naming a Theme keeps its verdict
+    ///   and drops the Theme;
+    /// - Theme fields given when the request didn't ask about Themes are ignored.
+    fn read_theme(&self, item: &AnswerItem) -> Result<(Option<ThemeAnswer>, bool), InvalidOutput> {
         if self.themes.is_empty() {
-            if item.theme_fit.is_some() || item.theme.is_some() {
-                return Err(InvalidOutput(format!(
-                    "the judgement of {id:?} answers about Themes, which weren't asked about"
-                )));
-            }
-            return Ok(None);
+            let answered = item.theme_fit.is_some() || item.theme.is_some();
+            return Ok((None, answered));
         }
         let (Some(fit), Some(theme)) = (item.theme_fit, &item.theme) else {
             let missing = if item.theme_fit.is_none() {
@@ -321,41 +337,51 @@ impl<'a> JudgeRequest<'a> {
                 "theme"
             };
             return Err(InvalidOutput(format!(
-                "the judgement of {id:?} has no {missing}"
+                "the judgement of {:?} has no {missing}",
+                item.id
             )));
         };
         let theme = theme.as_deref().map(str::trim).filter(|t| !t.is_empty());
-        let fit = match (fit, theme) {
+        let (fit, normalised) = match (fit, theme) {
             (AnswerThemeFit::OnTheme, Some(theme)) => {
-                let asked = self
+                match self
                     .themes
                     .iter()
                     .find(|t| t.to_lowercase() == theme.to_lowercase())
-                    .ok_or_else(|| {
-                        InvalidOutput(format!(
-                            "the judgement of {id:?} names the Theme {theme:?}, which isn't one of {:?}",
-                            self.themes
-                        ))
-                    })?;
-                ThemeFit::OnTheme(asked.clone())
+                {
+                    Some(asked) => (ThemeFit::OnTheme(asked.clone()), false),
+                    None => (ThemeFit::OpenThemed, true),
+                }
             }
-            (AnswerThemeFit::OnTheme, None) => {
-                return Err(InvalidOutput(format!(
-                    "the judgement of {id:?} is on_theme but names no Theme"
-                )));
-            }
-            (AnswerThemeFit::OpenThemed, None) => ThemeFit::OpenThemed,
-            (AnswerThemeFit::OffTheme, None) => ThemeFit::OffTheme,
-            (_, Some(theme)) => {
-                return Err(InvalidOutput(format!(
-                    "the judgement of {id:?} names the Theme {theme:?} but isn't on_theme"
-                )));
-            }
+            (AnswerThemeFit::OnTheme, None) => (ThemeFit::OpenThemed, true),
+            (AnswerThemeFit::OpenThemed, theme) => (ThemeFit::OpenThemed, theme.is_some()),
+            (AnswerThemeFit::OffTheme, theme) => (ThemeFit::OffTheme, theme.is_some()),
         };
-        Ok(Some(ThemeAnswer {
-            asked: self.themes.to_vec(),
-            fit,
-        }))
+        Ok((
+            Some(ThemeAnswer {
+                asked: self.themes.to_vec(),
+                fit,
+            }),
+            normalised,
+        ))
+    }
+}
+
+/// An Agent's answer as read: each judgement with its Candidate, and how many
+/// Theme answers were normalised rather than taken as given.
+#[derive(Debug)]
+pub struct ReadAnswer<'a> {
+    pub judgements: Vec<(&'a Candidate, Judgement)>,
+    pub themes_normalised: usize,
+}
+
+/// The line a Run prints when it normalised Theme answers, such as
+/// `Normalised 3 Theme answers.`; `None` when it normalised none.
+pub fn themes_normalised_line(count: usize) -> Option<String> {
+    match count {
+        0 => None,
+        1 => Some("Normalised 1 Theme answer.".to_owned()),
+        n => Some(format!("Normalised {n} Theme answers.")),
     }
 }
 
@@ -577,8 +603,8 @@ struct AnswerItem {
     application_deadline: Option<String>,
     application_status: ApplicationStatus,
     reason: String,
-    /// Only in [`schema_with_themes`]; [`JudgeRequest::read_theme`] checks it
-    /// is there exactly when the request asks about Themes.
+    /// Only in [`schema_with_themes`]; [`JudgeRequest::read_theme`] requires
+    /// it when the request asks about Themes and ignores it otherwise.
     #[serde(default)]
     theme_fit: Option<AnswerThemeFit>,
     /// `Some(None)` for a `null` Theme, `None` when the key is missing.
@@ -1058,7 +1084,7 @@ mod tests {
     }
 
     #[test]
-    fn theme_answers_that_dont_match_are_rejected() {
+    fn theme_answers_missing_what_the_schema_requires_are_rejected() {
         let candidates = [candidate("Ghent Hack")];
         let ids = numbered_ids(1);
         let themed = themed_profile();
@@ -1071,24 +1097,12 @@ mod tests {
             ),
             ("a missing theme_fit key", themed_item(r#""theme": null"#)),
             (
+                "a null theme_fit",
+                themed_item(r#""theme_fit": null, "theme": null"#),
+            ),
+            (
                 "an unknown theme_fit",
                 themed_item(r#""theme_fit": "maybe", "theme": null"#),
-            ),
-            (
-                "an on-Theme answer naming no Theme",
-                themed_item(r#""theme_fit": "on_theme", "theme": null"#),
-            ),
-            (
-                "a Theme that wasn't asked about",
-                themed_item(r#""theme_fit": "on_theme", "theme": "fintech""#),
-            ),
-            (
-                "an open-themed answer naming a Theme",
-                themed_item(r#""theme_fit": "open_themed", "theme": "climate""#),
-            ),
-            (
-                "an off-Theme answer naming a Theme",
-                themed_item(r#""theme_fit": "off_theme", "theme": "climate""#),
             ),
         ];
         for (what, item) in &bad {
@@ -1097,13 +1111,103 @@ mod tests {
                 "{what} should be rejected: {item}"
             );
         }
+    }
 
+    #[test]
+    fn sloppy_theme_answers_are_normalised_and_counted() {
+        let candidates = [candidate("Ghent Hack")];
+        let ids = numbered_ids(1);
+        let themed = themed_profile();
+        let request = JudgeRequest::new(&candidates, &ids, &themed);
+        let read = |fields: &str| {
+            let read = request
+                .read_answer(&answer(&[&themed_item(fields)]))
+                .unwrap();
+            let fit = read.judgements[0].1.theme.clone().unwrap().fit;
+            (fit, read.themes_normalised)
+        };
+        let normalised = [
+            (
+                "an on-Theme answer naming no Theme counts as open-themed",
+                r#""theme_fit": "on_theme", "theme": null"#,
+                ThemeFit::OpenThemed,
+            ),
+            (
+                "an on-Theme answer naming an empty Theme counts as open-themed",
+                r#""theme_fit": "on_theme", "theme": " ""#,
+                ThemeFit::OpenThemed,
+            ),
+            (
+                "a Theme the person doesn't have isn't kept",
+                r#""theme_fit": "on_theme", "theme": "fintech""#,
+                ThemeFit::OpenThemed,
+            ),
+            (
+                "a near-miss Theme isn't kept either",
+                r#""theme_fit": "on_theme", "theme": "AI""#,
+                ThemeFit::OpenThemed,
+            ),
+            (
+                "an open-themed answer naming a Theme drops it",
+                r#""theme_fit": "open_themed", "theme": "climate""#,
+                ThemeFit::OpenThemed,
+            ),
+            (
+                "an off-Theme answer naming a Theme stays off-Theme",
+                r#""theme_fit": "off_theme", "theme": "climate""#,
+                ThemeFit::OffTheme,
+            ),
+        ];
+        for (what, fields, fit) in normalised {
+            assert_eq!(read(fields), (fit, 1), "{what}");
+        }
+        assert_eq!(
+            read(r#""theme_fit": "on_theme", "theme": "climate""#),
+            (ThemeFit::OnTheme("climate".into()), 0),
+            "a clean answer isn't counted"
+        );
+
+        // Two sloppy answers in one batch count twice, and both are judged.
+        let two = [candidate("Ghent Hack"), candidate("Liège Hack")];
+        let two_ids = numbered_ids(2);
+        let request = JudgeRequest::new(&two, &two_ids, &themed);
+        let second = themed_item(r#""theme_fit": "off_theme", "theme": "climate""#)
+            .replace("\"id\": \"1\"", "\"id\": \"2\"");
+        let first = themed_item(r#""theme_fit": "on_theme", "theme": "AI""#);
+        let read = request.read_answer(&answer(&[&first, &second])).unwrap();
+        assert_eq!(read.judgements.len(), 2);
+        assert_eq!(read.themes_normalised, 2);
+    }
+
+    #[test]
+    fn a_theme_answer_when_none_was_asked_is_ignored_and_counted() {
+        let candidates = [candidate("Ghent Hack")];
+        let ids = numbered_ids(1);
         let plain = profile();
         let unasked = JudgeRequest::new(&candidates, &ids, &plain);
         let item = themed_item(r#""theme_fit": "off_theme", "theme": null"#);
-        assert!(
-            unasked.read_judgements(&answer(&[&item])).is_err(),
-            "a Theme answer when none was asked is rejected"
+        let read = unasked.read_answer(&answer(&[&item])).unwrap();
+        assert_eq!(read.judgements[0].1.theme, None);
+        assert_eq!(read.themes_normalised, 1);
+        assert_eq!(
+            unasked
+                .read_answer(&answer(&[ITEM]))
+                .unwrap()
+                .themes_normalised,
+            0
+        );
+    }
+
+    #[test]
+    fn the_normalised_line_counts_theme_answers() {
+        assert_eq!(themes_normalised_line(0), None);
+        assert_eq!(
+            themes_normalised_line(1).as_deref(),
+            Some("Normalised 1 Theme answer.")
+        );
+        assert_eq!(
+            themes_normalised_line(3).as_deref(),
+            Some("Normalised 3 Theme answers.")
         );
     }
 

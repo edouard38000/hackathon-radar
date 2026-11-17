@@ -185,6 +185,9 @@ pub struct FakeAgent {
     /// How each Candidate relates to the Themes, by name, when a request asks
     /// about Themes; any other Candidate is open-themed.
     pub theme_fits: Vec<(String, ThemeFit)>,
+    /// Raw `theme_fit` and `theme` fields by Candidate name, given instead of
+    /// `theme_fits` when a request asks about Themes.
+    pub sloppy_themes: Vec<(String, String, Option<String>)>,
     /// The Themes each judging or recheck request asked about, empty when it
     /// asked about none.
     pub themes_asked: RefCell<Vec<Vec<String>>>,
@@ -230,6 +233,7 @@ impl FakeAgent {
             asked: RefCell::new(Vec::new()),
             eligibility: RefCell::new(Vec::new()),
             theme_fits: Vec::new(),
+            sloppy_themes: Vec::new(),
             themes_asked: RefCell::new(Vec::new()),
             estimates: Vec::new(),
             travel_raw: None,
@@ -260,6 +264,17 @@ impl FakeAgent {
     pub fn set_theme_fit(&mut self, name: &str, fit: ThemeFit) {
         self.theme_fits.retain(|(n, _)| n != name);
         self.theme_fits.push((name.to_owned(), fit));
+    }
+
+    /// Answers the Theme question about `name` with these raw fields, which
+    /// may be inconsistent, as a sloppy Agent's are.
+    pub fn with_sloppy_theme(mut self, name: &str, theme_fit: &str, theme: Option<&str>) -> Self {
+        self.sloppy_themes.push((
+            name.to_owned(),
+            theme_fit.to_owned(),
+            theme.map(str::to_owned),
+        ));
+        self
     }
 
     pub fn recheck_requests(&self) -> usize {
@@ -502,6 +517,14 @@ impl Agent for FakeAgent {
                             };
                             answer["theme_fit"] = theme_fit.into();
                             answer["theme"] = theme.into();
+                            if let Some((_, fit, theme)) = self
+                                .sloppy_themes
+                                .iter()
+                                .find(|(name, _, _)| *name == sent.candidate.name)
+                            {
+                                answer["theme_fit"] = fit.as_str().into();
+                                answer["theme"] = theme.clone().into();
+                            }
                         }
                         answer
                     })
