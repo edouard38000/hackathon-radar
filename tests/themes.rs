@@ -82,7 +82,7 @@ fn with_themes_an_off_theme_hackathon_doesnt_fit_while_on_theme_and_open_themed_
     // The on-Theme entry shows its Theme; open-themed ones show nothing extra.
     assert_eq!(
         entry(alert, LIEGE),
-        "Hacking Health Liège\nLiège, 12–13 Mar 2027\n\
+        "Hacking Health Liège\nLiège, 12 Mar 2027\n\
          Status unknown · deadline unknown\nTheme: health\n\
          https://hackathon.be/hackathons/hacking-health-liege-2027/"
     );

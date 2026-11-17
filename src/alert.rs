@@ -80,6 +80,9 @@ pub struct Entry {
     pub trip: Option<String>,
     /// The Fare, shown after the trip; set once Fares exist (ticket 08).
     pub fare: Option<String>,
+    /// The Profile's Theme it is about, when the Agent judged it on-Theme
+    /// (ticket 24); an open-themed Hackathon shows none.
+    pub theme: Option<String>,
 }
 
 impl Entry {
@@ -96,6 +99,7 @@ impl Entry {
             travel_detail: None,
             trip: None,
             fare: None,
+            theme: None,
         }
     }
 
@@ -212,7 +216,7 @@ fn heading(entries: &[Entry], kind: AlertKind) -> String {
 }
 
 /// The entry's lines: name; city, dates and travel (funding, or the trip and
-/// Fare); status and deadline; link.
+/// Fare); status and deadline; the matched Theme, when on-Theme; link.
 fn entry(entry: &Entry) -> String {
     let hackathon = &entry.hackathon;
     let dates = format_dates(hackathon.start, hackathon.end);
@@ -225,6 +229,7 @@ fn entry(entry: &Entry) -> String {
     }
     let application = application_line(entry.status, entry.deadline, entry.reminder_days_left);
     let mut lines = vec![hackathon.name.clone(), when_where, application];
+    lines.extend(entry.theme.as_ref().map(|theme| format!("Theme: {theme}")));
     lines.extend(hackathon.link.clone());
     lines.join("\n")
 }
@@ -427,6 +432,20 @@ mod tests {
         assert!(text(vec![entry]).contains(
             "\nMunich, 5–6 Dec 2026 · Travel-funded (full): Flights and two hotel nights\n"
         ));
+    }
+
+    #[test]
+    fn an_on_theme_entry_shows_its_theme_before_the_link() {
+        let entry = Entry {
+            theme: Some("climate".into()),
+            ..munich()
+        };
+        assert_eq!(
+            text(vec![entry]),
+            "hackathon-radar: 1 Hackathon newly fits you\n\n\
+             Munich Hack\nMunich, 5–6 Dec 2026\n\
+             Status unknown · deadline unknown\nTheme: climate\nhttps://example.org/munich"
+        );
     }
 
     #[test]

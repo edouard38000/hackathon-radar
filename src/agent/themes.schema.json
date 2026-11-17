@@ -1,0 +1,11 @@
+{
+  "theme_fit": {
+    "type": "string",
+    "enum": ["on_theme", "open_themed", "off_theme"],
+    "description": "on_theme when it is about at least one of the person's Themes, open_themed when participants may build anything, off_theme when it is clearly about something else."
+  },
+  "theme": {
+    "type": ["string", "null"],
+    "description": "The Theme it is about, copied exactly from the person's Themes, when theme_fit is on_theme; null otherwise."
+  }
+}

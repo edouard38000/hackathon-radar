@@ -14,10 +14,13 @@
 //! Hackathon outside Countries passes the data-only rules too, because only the
 //! Agent can tell whether it is Travel-funded; it Fits only once judged so.
 //! The same rule lets a Travel-funded flight skip the Flight budget.
+//!
+//! Themes (ticket 24, ADR 0010) need judgement, so the Agent answers them as
+//! part of judging; [`fits_themes`] applies its answer.
 
 use chrono::NaiveDate;
 
-use crate::agent::{Judgement, TravelFunded};
+use crate::agent::{Judgement, ThemeFit, TravelFunded};
 use crate::candidate::Candidate;
 use crate::profile::Profile;
 use crate::sources::places;
@@ -49,8 +52,8 @@ pub fn in_countries(candidate: &Candidate, profile: &Profile) -> bool {
 }
 
 /// Whether a judged Hackathon Fits: it passes the data-only rules, the Agent
-/// judged it a Hackathon the person is eligible for, and it is in Countries or
-/// Travel-funded under the Travel-funded rule.
+/// judged it a Hackathon the person is eligible for, it is in Countries or
+/// Travel-funded under the Travel-funded rule, and it Fits the Themes.
 pub fn fits(
     candidate: &Candidate,
     judgement: &Judgement,
@@ -60,4 +63,29 @@ pub fn fits(
     passes(candidate, profile, today)
         && judgement.fits()
         && (in_countries(candidate, profile) || judgement.travel_funded != TravelFunded::None)
+        && fits_themes(judgement, profile)
+}
+
+/// Whether a judged Hackathon Fits the Profile's Themes (ticket 24, ADR 0010):
+/// with no Themes every subject does; with Themes, every Hackathon but one the
+/// Agent judged off-Theme does, on-Theme and open-themed alike. A judgement
+/// with no answer about the Profile's current Themes (made before they were
+/// set, or about other Themes) Fits until a recheck answers about them.
+pub fn fits_themes(judgement: &Judgement, profile: &Profile) -> bool {
+    !matches!(theme_fit(judgement, profile), Some(ThemeFit::OffTheme))
+}
+
+/// The Theme a judged Hackathon is about, among the Profile's current Themes,
+/// as an Alert entry shows it; `None` when it is open-themed or not judged on them.
+pub fn matched_theme<'j>(judgement: &'j Judgement, profile: &Profile) -> Option<&'j str> {
+    theme_fit(judgement, profile).and_then(ThemeFit::theme)
+}
+
+/// The judgement's answer about the Profile's current Themes, if it has one.
+fn theme_fit<'j>(judgement: &'j Judgement, profile: &Profile) -> Option<&'j ThemeFit> {
+    judgement
+        .theme
+        .as_ref()
+        .filter(|answer| !profile.themes.is_empty() && answer.is_about(&profile.themes))
+        .map(|answer| &answer.fit)
 }
