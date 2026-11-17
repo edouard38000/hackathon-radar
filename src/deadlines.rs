@@ -23,10 +23,15 @@
 //! - nearest deadline first (unknown deadlines last), then nearest start date;
 //! - a closed one only while it could still reopen (a waitlist, a second
 //!   round, or a mistaken "closed"): its deadline is unknown or hasn't passed
-//!   and it hasn't started. It waits twice `recheck_every_days`, and closed ones
-//!   only fill the batch after every due open one, soonest start first, at most
-//!   a quarter of `rechecks_per_run` (rounded up). One found open again is
-//!   newly Fitting, so the Alert announces it ([`entries`]);
+//!   and it hasn't started. It waits twice `recheck_every_days`. When any
+//!   closed one is due, one slot of the batch is kept for the soonest-starting
+//!   one, so a person with more open ones due than `rechecks_per_run` still has
+//!   closed ones rechecked; this deliberately crowds out at most one open
+//!   recheck per Run, and a slot no closed one needs goes to the open ones.
+//!   With `rechecks_per_run = 1` the open ones keep that slot. Closed ones also
+//!   take any room the open ones leave, soonest start first, at most a quarter
+//!   of `rechecks_per_run` (rounded up) in all. One found open again is newly
+//!   Fitting, so the Alert announces it ([`entries`]);
 //! - at most `rechecks_per_run` per Run, in one request held to `agent.max_turns`;
 //! - not at all on a Run whose Agent already failed to judge.
 
@@ -119,14 +124,16 @@ pub fn recheck(
     });
     closed.sort_by_key(|k| (k.hackathon.start, k.hackathon.name.clone()));
 
-    // Open ones first; closed ones only take what's left, up to their share.
-    let closed_room = settings
-        .rechecks_per_run
-        .saturating_sub(open.len())
-        .min(closed_share(settings.rechecks_per_run));
+    // One slot is kept for the soonest closed one when any is due, unless it
+    // would be the only slot; open ones take the rest, and closed ones any
+    // room left, up to their share.
+    let per_run = settings.rechecks_per_run;
+    let reserved = usize::from(!closed.is_empty() && per_run > 1);
+    let open_taken = open.len().min(per_run - reserved);
+    let closed_room = (per_run - open_taken).min(closed_share(per_run));
     let batch: Vec<Candidate> = open
         .iter()
-        .take(settings.rechecks_per_run)
+        .take(open_taken)
         .chain(closed.iter().take(closed_room))
         .map(|k| k.hackathon.clone())
         .collect();

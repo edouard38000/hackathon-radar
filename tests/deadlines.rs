@@ -462,7 +462,7 @@ fn a_closed_hackathon_whose_deadline_has_passed_or_that_has_started_is_never_rec
 }
 
 #[test]
-fn closed_hackathons_are_rechecked_less_often_and_never_crowd_open_ones_out() {
+fn closed_hackathons_are_rechecked_less_often_and_take_a_small_share_of_the_batch() {
     let mut harness = Harness::new(travel_profile(
         &["Belgium"],
         "[deadlines]\nrechecks_per_run = 3\n",
@@ -480,10 +480,11 @@ fn closed_hackathons_are_rechecked_less_often_and_never_crowd_open_ones_out() {
     ]);
     harness.run(&listed, date(2026, 11, 9), LIVE_RUN);
 
-    // The 12th: only the open ones are due. The 15th: all five are, and the
-    // open ones fill the batch. The 16th: the open ones were just checked,
-    // and the closed ones get a small share, soonest first.
-    for day in [12, 15, 16, 17] {
+    // The 12th: only the open ones are due, and they get the whole batch. The
+    // 15th: all five are; one slot goes to the soonest closed one and the
+    // share (a quarter of 3, rounded up) allows no more. The 16th: the open
+    // one left out goes first, and the other closed one takes its slot.
+    for day in [12, 15, 16] {
         harness.run(&listed, date(2026, 11, day), LIVE_RUN);
     }
 
@@ -491,11 +492,39 @@ fn closed_hackathons_are_rechecked_less_often_and_never_crowd_open_ones_out() {
         rechecked(&harness),
         [
             vec!["Open A", "Open B", "Open C"],
-            vec!["Open A", "Open B", "Open C"],
-            vec!["Closed Soon"],
-            vec!["Closed Late"],
+            vec!["Open A", "Open B", "Closed Soon"],
+            vec!["Open C", "Closed Late"],
         ]
     );
+}
+
+#[test]
+fn a_closed_hackathon_gets_one_slot_even_when_open_ones_would_fill_the_batch() {
+    let mut harness = Harness::new(travel_profile(
+        &["Belgium"],
+        "[deadlines]\nrechecks_per_run = 3\n",
+    ));
+    harness.agent = FakeAgent::approving()
+        .with_verdict("Closed Hack", with_status(ApplicationStatus::Closed, None));
+    let listed = source(&[
+        ghent("Open A", date(2026, 12, 1)),
+        ghent("Open B", date(2026, 12, 2)),
+        ghent("Open C", date(2026, 12, 3)),
+        ghent("Open D", date(2026, 12, 4)),
+        ghent("Open E", date(2026, 12, 5)),
+        ghent("Closed Hack", date(2026, 12, 20)),
+    ]);
+    harness.run(&listed, date(2026, 11, 9), LIVE_RUN);
+
+    // Five open ones and the closed one are all due.
+    let run = harness.run(&listed, date(2026, 11, 15), LIVE_RUN);
+
+    assert_eq!(
+        rechecked(&harness),
+        [["Open A", "Open B", "Closed Hack"]],
+        "still 3 long, the closed one in the reserved slot"
+    );
+    assert_eq!(run.rechecked, 3);
 }
 
 // --- Newly Travel-funded ---
