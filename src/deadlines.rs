@@ -9,7 +9,8 @@
 //! [`due`] decides what an Alert owes the person from what is stored alone:
 //! Deadline reminders and known Hackathons that newly became Travel-funded.
 //! It takes the store and today's date, never this Run's judgements, so
-//! reminders still go out on a Run whose Agent failed.
+//! reminders still go out on a Run whose Agent failed. No Alert lists a
+//! closed Hackathon ([`entries`]).
 //!
 //! The recheck policy, set in the Profile's `[deadlines]` section:
 //! - a Hackathon is rechecked while it is known (judged a Hackathon the person
@@ -196,10 +197,13 @@ pub fn due(store: &Store, profile: &Profile, today: NaiveDate) -> anyhow::Result
         .collect();
     let mut due = Due::default();
     for k in known(store)? {
-        if !rules::fits(&k.hackathon, &k.judgement, profile, today) {
+        let status = k.judgement.status_on(today);
+        // Nothing about a closed Hackathon is due; see [`entries`].
+        if status == ApplicationStatus::Closed
+            || !rules::fits(&k.hackathon, &k.judgement, profile, today)
+        {
             continue;
         }
-        let status = k.judgement.status_on(today);
         if let Some(deadline) = k.judgement.deadline {
             let days_left = (deadline - today).num_days();
             if status.is_open()
@@ -211,7 +215,7 @@ pub fn due(store: &Store, profile: &Profile, today: NaiveDate) -> anyhow::Result
                 due.reminders.push(k.clone());
             }
         }
-        if status != ApplicationStatus::Closed && funded.contains(&key_of(&k.hackathon)) {
+        if funded.contains(&key_of(&k.hackathon)) {
             due.newly_funded.push(k);
         }
     }
@@ -220,6 +224,11 @@ pub fn due(store: &Store, profile: &Profile, today: NaiveDate) -> anyhow::Result
 
 /// The Alert's entries: `new`, the Hackathons that newly Fit, and what is
 /// [`due`]; one entry per Hackathon, whatever brings it into the Alert.
+///
+/// A closed Hackathon gets no entry: the person can't apply, so it isn't
+/// listed, counted or Announced. It stays stored, and once a recheck finds it
+/// open again it is newly Fitting like any other Hackathon no Alert has
+/// announced.
 pub fn entries(
     store: &Store,
     profile: &Profile,
@@ -230,6 +239,9 @@ pub fn entries(
     for c in new {
         let mut entry = Entry::new_fit(c.clone());
         if let Some(judgement) = store.judgement(&c.source, &c.source_key)? {
+            if judgement.status_on(today) == ApplicationStatus::Closed {
+                continue;
+            }
             describe(&mut entry, &judgement, today);
         }
         entry.trip = store.trip(&c.source, &c.source_key)?.map(|t| t.label);
@@ -293,4 +305,69 @@ pub fn still_fitting(
         }
     }
     Ok(kept)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::TravelFunded;
+
+    fn date(d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 11, d).unwrap()
+    }
+
+    fn ghent(name: &str) -> Candidate {
+        Candidate {
+            source: "s".into(),
+            source_key: name.into(),
+            name: name.into(),
+            start: NaiveDate::from_ymd_opt(2026, 12, 10).unwrap(),
+            end: NaiveDate::from_ymd_opt(2026, 12, 10).unwrap(),
+            city: Some("Ghent".into()),
+            location: None,
+            country: Some("Belgium".into()),
+            link: None,
+        }
+    }
+
+    fn judged(status: ApplicationStatus, deadline: Option<NaiveDate>) -> Judgement {
+        Judgement {
+            is_hackathon: true,
+            eligible: true,
+            eligibility_restriction: None,
+            travel_funded: TravelFunded::None,
+            travel_detail: None,
+            deadline,
+            status,
+            reason: "Teams build software.".into(),
+        }
+    }
+
+    #[test]
+    fn a_closed_hackathon_gets_no_entry_whatever_closed_it() {
+        let profile = Profile::from_toml(
+            "countries = [\"Belgium\"]\n[home]\ncity = \"Brussels\"\nairports = [\"BRU\"]\n",
+            std::path::Path::new("test.toml"),
+        )
+        .unwrap();
+        let (open, closed, passed) = (ghent("Open"), ghent("Closed"), ghent("Passed"));
+        let mut store = Store::open_in_memory().unwrap();
+        store
+            .save_judgements(
+                "fake",
+                &[
+                    (&open, judged(ApplicationStatus::Open, Some(date(30)))),
+                    (&closed, judged(ApplicationStatus::Closed, None)),
+                    // Open as judged, but its deadline has passed by today.
+                    (&passed, judged(ApplicationStatus::Open, Some(date(10)))),
+                ],
+                date(9),
+            )
+            .unwrap();
+
+        let listed = entries(&store, &profile, &[open, closed, passed], date(12)).unwrap();
+
+        let names: Vec<&str> = listed.iter().map(|e| e.hackathon.name.as_str()).collect();
+        assert_eq!(names, ["Open"]);
+    }
 }
