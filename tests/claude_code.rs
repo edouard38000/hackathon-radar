@@ -385,3 +385,50 @@ fn a_whole_run_through_the_adapter_keeps_rejected_candidates_for_the_next_run() 
     assert!(harness.stored_names().is_empty());
     assert_eq!(harness.unjudged_names().len(), 5);
 }
+
+#[test]
+fn each_judging_request_of_a_run_carries_its_own_step_cap() {
+    let mut harness = Harness::new(travel_profile(&["Belgium"], "[agent]\nmax_turns = 40\n"));
+    // Every request is answered with no judgements, so no Candidate is judged
+    // and nothing stops the Run's requests early.
+    let runner = FakeRunner::printing(
+        r#"{"subtype": "success", "is_error": false, "structured_output": {"judgements": []}}"#,
+        0,
+    );
+    let claude = ClaudeCode::new(&runner, harness.profile.agent.max_turns);
+    let waiting: Vec<Candidate> = (0..50)
+        .map(|i| Candidate {
+            source_key: format!("hack-{i}"),
+            name: format!("Ghent Hack {:02}", i + 1),
+            start: date(2026, 12, 1) + chrono::Days::new(i),
+            end: date(2026, 12, 1) + chrono::Days::new(i),
+            link: Some(format!("https://example.org/hack-{i}")),
+            ..candidate("unused")
+        })
+        .collect();
+    let source = FakeSource {
+        name: "fake".into(),
+        result: Ok(waiting),
+    };
+
+    let outcome = harness.run_with_agent(&claude, &[Box::new(source)], date(2026, 11, 17), DRY_RUN);
+
+    let commands = runner.commands.borrow();
+    assert_eq!(commands.len(), 3, "the default is three judging requests");
+    for command in commands.iter() {
+        assert_eq!(command.args, claude.args(SCHEMA));
+        let at = command
+            .args
+            .iter()
+            .position(|a| a == "--max-turns")
+            .unwrap();
+        assert_eq!(command.args[at + 1], "40", "each request has the whole cap");
+    }
+    let sent: Vec<usize> = commands
+        .iter()
+        .map(|c| c.stdin.matches("\"id\": ").count())
+        .collect();
+    assert_eq!(sent, [20, 20, 10]);
+    assert_eq!(outcome.agent_failure, None);
+    assert_eq!((outcome.judged, outcome.unjudged), (0, 50));
+}

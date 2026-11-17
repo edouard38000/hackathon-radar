@@ -196,7 +196,7 @@ Each Run sends the listings that passed the Profile's rules to your Agent, chose
 claude -p --permission-mode dontAsk --tools WebSearch,WebFetch --allowedTools WebSearch,WebFetch --strict-mcp-config --setting-sources "" --max-turns <cap> --output-format json --json-schema <schema>
 ```
 
-It loads none of your Claude Code settings, hooks or MCP servers, so nothing you've allowed for your own work applies to it. The step cap is `agent.max_turns` in your Profile (50 by default). A Run makes at most two Agent requests: judging, capped by `agent.max_turns`, and travel estimates (see Getting there), capped by `agent.travel_max_turns` (15 by default).
+It loads none of your Claude Code settings, hooks or MCP servers, so nothing you've allowed for your own work applies to it. Every Agent request has its own step cap. A Run sends up to `agent.judging_requests_per_run` judging requests (3 by default), one after another, each of at most 20 listings and each capped by `agent.max_turns` (50 by default); it stops early once nothing waits, or after a request fails, and the rest wait for the next Run. Travel estimates (see Getting there) are capped by `agent.travel_max_turns` (15 by default). More judging requests keep up with more listings but use more of your subscription; at the defaults, two Runs a week judge up to 120 listings.
 
 **Codex** (`adapter = "codex"`, experimental) runs headless on your own `codex` login (or `CODEX_API_KEY`, if you set it). If `codex` isn't signed in, run `codex login` once yourself.
 

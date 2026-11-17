@@ -173,6 +173,9 @@ pub enum FakeAnswer {
 /// An Agent that answers canned judgements and records what it was asked.
 pub struct FakeAgent {
     pub answer: FakeAnswer,
+    /// From the nth judging request on (counting from 1), answer this instead
+    /// of `answer`, as an Agent that fails partway through a Run does.
+    pub from_request: Option<(usize, FakeAnswer)>,
     /// Verdicts by Candidate name; any other Candidate gets `default`.
     pub verdicts: Vec<(String, Judgement)>,
     pub default: Judgement,
@@ -227,6 +230,7 @@ impl FakeAgent {
     pub fn approving() -> Self {
         Self {
             answer: FakeAnswer::Judge,
+            from_request: None,
             verdicts: Vec::new(),
             default: hackathon(),
             leave_out: Vec::new(),
@@ -478,7 +482,15 @@ impl Agent for FakeAgent {
             .borrow_mut()
             .push(request.eligibility.clone());
         self.themes_asked.borrow_mut().push(request.themes.to_vec());
-        match &self.answer {
+        let answer = match &self.from_request {
+            Some((nth, answer))
+                if !request.prompt.contains(RECHECK_NOTE) && self.requests() >= *nth =>
+            {
+                answer
+            }
+            _ => &self.answer,
+        };
+        match answer {
             FakeAnswer::Fail(error) => anyhow::bail!("{error}"),
             FakeAnswer::Raw(text) => Ok(text.clone()),
             FakeAnswer::Judge => {

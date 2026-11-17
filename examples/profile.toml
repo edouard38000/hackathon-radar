@@ -98,10 +98,17 @@ student = false
 nationalities = ["Belgian"]
 # age = 27
 
-# The Agent that judges listings, and the most steps it may take on one Run.
+# The Agent that judges listings, and the most steps it may take in one
+# request.
 [agent]
 adapter = "claude-code"
 max_turns = 50
+# How many judging requests one Run may send, one after another, each of at
+# most 20 listings and each held to max_turns. Optional: 3 by default, so a Run
+# judges up to 60 listings; at least 1. A Run stops early once nothing waits,
+# or after a request fails. More requests keep up with more listings but use
+# more of your subscription (or API spend); fewer leave more waiting.
+# judging_requests_per_run = 3
 # The most steps the Agent may take estimating train times and airports for
 # new cities, a separate, smaller request. Optional: 15 by default.
 # travel_max_turns = 15

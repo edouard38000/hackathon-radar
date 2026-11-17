@@ -708,6 +708,26 @@ fn a_profile_that_is_not_toml_says_where() {
     assert!(!profile.details.is_empty());
 }
 
+#[test]
+fn zero_judging_requests_per_run_fails_with_its_fix() {
+    let mut world = World::healthy();
+    world.profile = Some(format!(
+        "{PLAIN_PROFILE}\n[agent]\njudging_requests_per_run = 0\n"
+    ));
+    let report = world.run();
+    let profile = find(&report, "profile");
+
+    assert_eq!(profile.status, Status::Fail);
+    assert_eq!(
+        profile.details,
+        [
+            "agent.judging_requests_per_run is 0, so no Candidate would ever be judged; \
+             set it to at least 1 (3 by default)"
+        ]
+    );
+    assert!(profile.reason.contains("1 problem"), "{}", profile.reason);
+}
+
 // Secrets.
 
 #[test]

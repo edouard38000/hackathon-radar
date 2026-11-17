@@ -8,7 +8,7 @@ use std::path::Path;
 use chrono::{Days, NaiveDate};
 use hackathon_radar::agent::{INSTRUCTIONS_VERSION, TravelFunded};
 use hackathon_radar::candidate::Candidate;
-use hackathon_radar::judging::{ByCountries, MAX_CANDIDATES_PER_RUN, Tally};
+use hackathon_radar::judging::{ByCountries, MAX_CANDIDATES_PER_REQUEST, Tally};
 use hackathon_radar::profile::{Eligibility, Profile};
 use hackathon_radar::sources::Source;
 use support::*;
@@ -326,7 +326,7 @@ fn candidates_the_answer_leaves_out_wait_for_the_next_run() {
 
 #[test]
 fn a_run_sends_at_most_a_batch_and_the_rest_wait_their_turn() {
-    let mut harness = Harness::new(profile(&["Belgium"]));
+    let mut harness = Harness::new(one_request_per_run());
     let many: Vec<Candidate> = (1..=25)
         .map(|d| candidate(&format!("Hack {d:02}"), d))
         .collect();
@@ -338,8 +338,8 @@ fn a_run_sends_at_most_a_batch_and_the_rest_wait_their_turn() {
     };
 
     let first = harness.run(&source(), date(2026, 11, 9), DRY_RUN);
-    assert_eq!(first.judged, MAX_CANDIDATES_PER_RUN);
-    assert_eq!(first.unjudged, 25 - MAX_CANDIDATES_PER_RUN);
+    assert_eq!(first.judged, MAX_CANDIDATES_PER_REQUEST);
+    assert_eq!(first.unjudged, 25 - MAX_CANDIDATES_PER_REQUEST);
     assert_eq!(
         harness.agent.asked.borrow()[0][0],
         "Hack 01",
@@ -347,7 +347,7 @@ fn a_run_sends_at_most_a_batch_and_the_rest_wait_their_turn() {
     );
 
     let second = harness.run(&source(), date(2026, 11, 12), DRY_RUN);
-    assert_eq!(second.judged, 25 - MAX_CANDIDATES_PER_RUN);
+    assert_eq!(second.judged, 25 - MAX_CANDIDATES_PER_REQUEST);
     assert_eq!(second.unjudged, 0);
     assert_eq!(harness.stored_names().len(), 25);
 }
@@ -404,9 +404,35 @@ fn travel_funded_anywhere() -> Profile {
     travel_profile(&["Belgium"], "[travel]\ntravel_funded_anywhere = true\n")
 }
 
+/// [`travel_funded_anywhere`] with one judging request per Run, so one Run
+/// shows one request's split.
+fn travel_funded_anywhere_one_request() -> Profile {
+    travel_profile(
+        &["Belgium"],
+        "[travel]\ntravel_funded_anywhere = true\n\n[agent]\njudging_requests_per_run = 1\n",
+    )
+}
+
+/// [`profile`] in Belgium with one judging request per Run.
+fn one_request_per_run() -> Profile {
+    Profile::from_toml(
+        "countries = [\"Belgium\"]\n\n[home]\ncity = \"Brussels\"\nairports = [\"BRU\", \"CRL\"]\n\n\
+         [agent]\njudging_requests_per_run = 1\n",
+        Path::new("test-profile.toml"),
+    )
+    .unwrap()
+}
+
+fn split(in_countries: usize, outside: usize) -> ByCountries {
+    ByCountries {
+        in_countries,
+        outside,
+    }
+}
+
 #[test]
 fn candidates_outside_countries_are_judged_every_run_while_more_in_countries_wait() {
-    let mut harness = Harness::new(travel_funded_anywhere());
+    let mut harness = Harness::new(travel_funded_anywhere_one_request());
     let listed = ghent_and_boston(40, 12);
 
     // Forty wait in Countries, more than two batches hold, yet each Run also
@@ -462,7 +488,7 @@ fn candidates_outside_countries_are_judged_every_run_while_more_in_countries_wai
 #[test]
 fn a_share_one_group_does_not_use_goes_to_the_other() {
     // Few outside Countries: those in Countries take the rest of the batch.
-    let mut harness = Harness::new(travel_funded_anywhere());
+    let mut harness = Harness::new(travel_funded_anywhere_one_request());
     let outcome = harness.run(
         &listing(&ghent_and_boston(30, 2)),
         date(2026, 11, 17),
@@ -475,7 +501,7 @@ fn a_share_one_group_does_not_use_goes_to_the_other() {
     assert_eq!((outcome.judged, outcome.unjudged), (20, 12));
 
     // Few in Countries: those outside take the rest of the batch.
-    let mut harness = Harness::new(travel_funded_anywhere());
+    let mut harness = Harness::new(travel_funded_anywhere_one_request());
     let outcome = harness.run(
         &listing(&ghent_and_boston(3, 30)),
         date(2026, 11, 17),
@@ -535,4 +561,220 @@ fn started_candidates_leave_the_queue_without_being_sent_to_the_agent() {
     );
     assert_eq!((next.judged, next.unjudged), (3, 0));
     assert!(harness.unjudged_names().is_empty());
+}
+
+#[test]
+fn fifty_waiting_candidates_are_judged_in_three_requests_each_keeping_the_split() {
+    let mut harness = Harness::new(travel_funded_anywhere());
+    assert_eq!(
+        harness.profile.agent.judging_requests_per_run, 3,
+        "the default"
+    );
+
+    // As in the live test: most of the queue in Countries, the rest outside.
+    let outcome = harness.run(
+        &listing(&ghent_and_boston(38, 12)),
+        date(2026, 11, 17),
+        DRY_RUN,
+    );
+
+    let asked = harness.agent.asked.borrow();
+    assert_eq!(
+        *asked,
+        [
+            [numbered("Ghent Hack", 1, 15), numbered("Boston Hack", 1, 5)].concat(),
+            [
+                numbered("Ghent Hack", 16, 30),
+                numbered("Boston Hack", 6, 10)
+            ]
+            .concat(),
+            // Eight left in Countries: the share they don't use goes to those outside.
+            [
+                numbered("Ghent Hack", 31, 38),
+                numbered("Boston Hack", 11, 12)
+            ]
+            .concat(),
+        ]
+    );
+    assert!(asked.iter().all(|r| r.len() <= MAX_CANDIDATES_PER_REQUEST));
+    assert_eq!(outcome.agent_failure, None);
+    assert_eq!(
+        outcome.judging,
+        Tally {
+            judged: split(38, 12),
+            waiting: split(0, 0),
+        }
+    );
+    assert_eq!((outcome.judged, outcome.unjudged), (50, 0));
+    assert!(harness.unjudged_names().is_empty());
+    assert_eq!(harness.store.judgements().unwrap().len(), 50);
+}
+
+#[test]
+fn a_run_sends_at_most_the_profile_s_requests_and_the_rest_wait() {
+    let listed = ghent_and_boston(50, 30);
+
+    let mut harness = Harness::new(travel_funded_anywhere());
+    let outcome = harness.run(&listing(&listed), date(2026, 11, 17), DRY_RUN);
+    assert_eq!(harness.agent.requests(), 3);
+    assert_eq!(
+        outcome.judging,
+        Tally {
+            judged: split(45, 15),
+            waiting: split(5, 15),
+        }
+    );
+    assert_eq!(harness.unjudged_names().len(), 20);
+
+    let mut harness = Harness::new(travel_profile(
+        &["Belgium"],
+        "[travel]\ntravel_funded_anywhere = true\n\n[agent]\njudging_requests_per_run = 4\n",
+    ));
+    let outcome = harness.run(&listing(&listed), date(2026, 11, 17), DRY_RUN);
+    assert_eq!(harness.agent.requests(), 4);
+    assert_eq!(
+        harness.agent.asked.borrow()[3],
+        [
+            numbered("Ghent Hack", 46, 50),
+            numbered("Boston Hack", 16, 30)
+        ]
+        .concat()
+    );
+    assert_eq!(
+        outcome.judging,
+        Tally {
+            judged: split(50, 30),
+            waiting: split(0, 0),
+        }
+    );
+}
+
+#[test]
+fn requests_stop_once_the_queue_is_empty() {
+    let mut harness = Harness::new(travel_funded_anywhere());
+    let outcome = harness.run(
+        &listing(&ghent_and_boston(20, 5)),
+        date(2026, 11, 17),
+        DRY_RUN,
+    );
+    assert_eq!(
+        *harness.agent.asked.borrow(),
+        [
+            [numbered("Ghent Hack", 1, 15), numbered("Boston Hack", 1, 5)].concat(),
+            numbered("Ghent Hack", 16, 20),
+        ]
+    );
+    assert_eq!((outcome.judged, outcome.unjudged), (25, 0));
+
+    // Nothing waits on the next Run: no request at all.
+    let next = harness.run(
+        &listing(&ghent_and_boston(20, 5)),
+        date(2026, 11, 18),
+        DRY_RUN,
+    );
+    assert_eq!(harness.agent.requests(), 2);
+    assert_eq!((next.judged, next.unjudged), (0, 0));
+}
+
+#[test]
+fn candidates_an_answer_leaves_out_are_not_sent_again_in_the_same_run() {
+    let mut harness = Harness::new(travel_funded_anywhere());
+    harness.agent.leave_out = vec!["Ghent Hack 01".into()];
+
+    let outcome = harness.run(
+        &listing(&ghent_and_boston(25, 0)),
+        date(2026, 11, 17),
+        DRY_RUN,
+    );
+
+    assert_eq!(
+        *harness.agent.asked.borrow(),
+        [
+            numbered("Ghent Hack", 1, 20),
+            numbered("Ghent Hack", 21, 25)
+        ]
+    );
+    assert_eq!((outcome.judged, outcome.unjudged), (24, 1));
+    assert_eq!(harness.unjudged_names(), ["Ghent Hack 01"]);
+}
+
+#[test]
+fn after_a_failing_request_no_more_are_sent_and_its_candidates_stay_queued() {
+    let failures = [
+        (
+            FakeAnswer::Fail("Claude Code used all 50 steps before answering".into()),
+            "used all 50 steps",
+        ),
+        (
+            FakeAnswer::Raw("I couldn't open the pages, sorry.".into()),
+            "doesn't match the judgements schema",
+        ),
+    ];
+    for (failing, error) in failures {
+        let mut harness = Harness::new(travel_funded_anywhere());
+        harness.agent.from_request = Some((2, failing));
+        let listed = ghent_and_boston(38, 12);
+
+        let outcome = harness.run(&listing(&listed), date(2026, 11, 17), DRY_RUN);
+
+        assert_eq!(
+            harness.agent.requests(),
+            2,
+            "no request after the failing one"
+        );
+        let failure = outcome.agent_failure.expect("the Run reports the failure");
+        assert!(failure.contains(error), "{failure}");
+        assert_eq!(
+            outcome.judging,
+            Tally {
+                judged: split(15, 5),
+                waiting: split(23, 7),
+            },
+            "what the first request judged is kept"
+        );
+        assert_eq!(harness.store.judgements().unwrap().len(), 20);
+        let failed = [
+            numbered("Ghent Hack", 16, 30),
+            numbered("Boston Hack", 6, 10),
+        ]
+        .concat();
+        let queued = harness.store.unjudged().unwrap();
+        assert_eq!(queued.len(), 30);
+        for waiting in &queued {
+            let sent = failed.contains(&waiting.candidate.name);
+            let name = &waiting.candidate.name;
+            assert_eq!(waiting.attempts, u32::from(sent), "{name}");
+            assert_eq!(waiting.last_error.is_some(), sent, "{name}");
+        }
+
+        // The next Run judges the rest, soonest first.
+        harness.agent.from_request = None;
+        let next = harness.run(&listing(&listed), date(2026, 11, 18), DRY_RUN);
+        assert_eq!(harness.agent.requests(), 4);
+        assert_eq!(harness.agent.asked.borrow()[2], failed);
+        assert_eq!((next.judged, next.unjudged), (30, 0));
+        assert!(harness.unjudged_names().is_empty());
+    }
+}
+
+#[test]
+fn every_request_asks_about_themes_and_their_normalised_answers_add_up() {
+    let mut harness = Harness::new(themed_profile(&["Belgium"], &["climate"]));
+    harness.agent = FakeAgent::approving()
+        .with_sloppy_theme("Ghent Hack 01", "on_theme", Some("AI"))
+        .with_sloppy_theme("Ghent Hack 25", "open_themed", Some("climate"));
+
+    let outcome = harness.run(
+        &listing(&ghent_and_boston(30, 0)),
+        date(2026, 11, 17),
+        DRY_RUN,
+    );
+
+    assert_eq!(harness.agent.requests(), 2);
+    assert_eq!(
+        *harness.agent.themes_asked.borrow(),
+        [vec!["climate".to_owned()], vec!["climate".to_owned()]]
+    );
+    assert_eq!(outcome.themes_normalised, 2);
+    assert_eq!((outcome.judged, outcome.unjudged), (30, 0));
 }
