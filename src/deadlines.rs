@@ -15,8 +15,10 @@
 //! The recheck policy, set in the Profile's `[deadlines]` section:
 //! - a Hackathon is rechecked while it is known (judged a Hackathon the person
 //!   is eligible for), passes the data-only rules, Fits or would Fit if
-//!   Travel-funded (outside Countries under the Travel-funded rule), is not
-//!   closed, and starts within `recheck_horizon_days`;
+//!   Travel-funded (outside Countries under the Travel-funded rule), Fits the
+//!   Themes (so one judged before the Themes were set is rechecked, and gets
+//!   its Theme answer, while an off-Theme one isn't), is not closed, and
+//!   starts within `recheck_horizon_days`;
 //! - never one judged or rechecked fewer than `recheck_every_days` ago;
 //! - nearest deadline first (unknown deadlines last), then nearest start date;
 //! - at most `rechecks_per_run` per Run, in one request held to `agent.max_turns`;
@@ -51,6 +53,9 @@ pub struct Rechecked {
     pub waiting: usize,
     /// Why the Agent's recheck failed, if it did; those Hackathons are due again next Run.
     pub failure: Option<String>,
+    /// How many of the recheck's Theme answers were normalised rather than
+    /// taken as given ([`agent::ReadAnswer`]).
+    pub themes_normalised: usize,
 }
 
 /// Stores `closed` for every passed deadline, then rechecks the known
@@ -74,6 +79,7 @@ pub fn recheck(
         .into_iter()
         .filter(|k| {
             k.judgement.fits()
+                && rules::fits_themes(&k.judgement, profile)
                 && !rules::apply(vec![k.hackathon.clone()], profile, today).is_empty()
                 && k.judgement.status_on(today) != ApplicationStatus::Closed
                 && k.hackathon.start <= horizon
@@ -102,14 +108,15 @@ pub fn recheck(
     let answer = agent
         .judge(&request)
         .map_err(|e| format!("{e:#}"))
-        .and_then(|answer| request.read_judgements(&answer).map_err(|e| e.to_string()));
-    let judged = match answer {
-        Ok(judged) => judged,
+        .and_then(|answer| request.read_answer(&answer).map_err(|e| e.to_string()));
+    let (judged, themes_normalised) = match answer {
+        Ok(read) => (read.judgements, read.themes_normalised),
         Err(error) => {
             return Ok(Rechecked {
                 rechecked: 0,
                 waiting: due.len(),
                 failure: Some(error),
+                themes_normalised: 0,
             });
         }
     };
@@ -133,6 +140,7 @@ pub fn recheck(
         rechecked: judged.len(),
         waiting: due.len() - judged.len(),
         failure: None,
+        themes_normalised,
     })
 }
 
@@ -242,7 +250,7 @@ pub fn entries(
             if judgement.status_on(today) == ApplicationStatus::Closed {
                 continue;
             }
-            describe(&mut entry, &judgement, today);
+            describe(&mut entry, &judgement, profile, today);
         }
         entry.trip = store.trip(&c.source, &c.source_key)?.map(|t| t.label);
         entries.push(entry);
@@ -257,7 +265,7 @@ pub fn entries(
             new: false,
             ..Entry::new_fit(k.hackathon.clone())
         };
-        describe(&mut entry, &k.judgement, today);
+        describe(&mut entry, &k.judgement, profile, today);
         entry.trip = store.trip(&key.0, &key.1)?.map(|t| t.label);
         entries.push(entry);
         Ok(entries.len() - 1)
@@ -280,11 +288,12 @@ pub fn entries(
     Ok(entries)
 }
 
-fn describe(entry: &mut Entry, judgement: &Judgement, today: NaiveDate) {
+fn describe(entry: &mut Entry, judgement: &Judgement, profile: &Profile, today: NaiveDate) {
     entry.status = judgement.status_on(today);
     entry.deadline = judgement.deadline;
     entry.travel_funded = judgement.travel_funded;
     entry.travel_detail = judgement.travel_detail.clone();
+    entry.theme = rules::matched_theme(judgement, profile).map(str::to_owned);
 }
 
 /// Keeps those of `fitting` that still Fit by their stored judgement, which a
@@ -340,6 +349,7 @@ mod tests {
             deadline,
             status,
             reason: "Teams build software.".into(),
+            theme: None,
         }
     }
 

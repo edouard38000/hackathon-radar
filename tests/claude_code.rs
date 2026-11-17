@@ -227,6 +227,7 @@ fn a_recorded_result_parses_into_judgements() {
                     deadline: Some(date(2026, 11, 28)),
                     status: ApplicationStatus::Open,
                     reason: "Teams build software on site in Ghent over a weekend; the page states no participation restriction.".into(),
+                    theme: None,
                 }
             ),
             (
@@ -240,6 +241,7 @@ fn a_recorded_result_parses_into_judgements() {
                     deadline: None,
                     status: ApplicationStatus::OpenUntilFull,
                     reason: "Participants build data projects on open city data during the two days.".into(),
+                    theme: None,
                 }
             ),
         ]

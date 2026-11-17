@@ -79,6 +79,9 @@ pub struct Judged {
     pub tally: Tally,
     /// Why the Agent couldn't judge this Run, if it couldn't.
     pub failure: Option<String>,
+    /// How many of the Agent's Theme answers were normalised rather than
+    /// taken as given ([`agent::ReadAnswer`]).
+    pub themes_normalised: usize,
 }
 
 /// Judges `passed` (the Candidates that passed the data-only rules), along with
@@ -122,15 +125,18 @@ pub fn judge(
         .collect();
     let mut judged = ByCountries::default();
     let mut failure = None;
+    let mut themes_normalised = 0;
     if !batch.is_empty() {
         let ids = agent::numbered_ids(batch.len());
         let request = JudgeRequest::new(&batch, &ids, profile);
         let answer = agent
             .judge(&request)
             .map_err(|e| format!("{e:#}"))
-            .and_then(|answer| request.read_judgements(&answer).map_err(|e| e.to_string()));
+            .and_then(|answer| request.read_answer(&answer).map_err(|e| e.to_string()));
         match answer {
-            Ok(answered) => {
+            Ok(read) => {
+                themes_normalised = read.themes_normalised;
+                let answered = read.judgements;
                 store.save_judgements(agent.name(), &answered, today)?;
                 store.remove_unjudged(answered.iter().map(|(c, _)| *c))?;
                 for (c, _) in &answered {
@@ -167,6 +173,7 @@ pub fn judge(
             },
         },
         failure,
+        themes_normalised,
     })
 }
 

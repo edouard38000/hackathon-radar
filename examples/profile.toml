@@ -13,7 +13,9 @@ countries = ["Belgium", "France", "Netherlands", "Luxembourg"]
 # currency of Home's country (the euro if it isn't known).
 # currency = "EUR"
 
-# Themes: subjects you want Hackathons about. Optional.
+# Themes: subjects you want Hackathons about. Optional. With Themes, a
+# Hackathon Fits when it is about one of them or open-themed (build anything);
+# one clearly about something else doesn't. Without, every subject Fits.
 # themes = ["AI agents", "climate"]
 
 # The city you travel from, its country (optional; with it, train trips within

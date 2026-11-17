@@ -302,6 +302,7 @@ fn imported(
             row.status
         },
         reason: reason(row, marks.ruled_out.as_deref(), ended_early),
+        theme: None,
     };
 
     let trip = row.getting_there.as_ref().map(|there| trip(there, profile));

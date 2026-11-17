@@ -29,7 +29,7 @@ Whether a Travel-funded hackathon counts anywhere in the world, regardless of Co
 _Avoid_: Défraiement rule, worldwide rule
 
 **Theme**:
-A subject a person wants hackathons about, such as AI agents or climate.
+A subject a person wants hackathons about, such as AI agents or climate. The Agent judges whether a Hackathon is about one of the person's Themes (on-Theme), Open-themed, or clearly about something else (off-Theme); with no Themes, every subject Fits.
 _Avoid_: Topic, track, category
 
 **Eligibility**:
@@ -55,8 +55,12 @@ A Hackathon whose organiser covers part or all of a participant's travel or lodg
 _Avoid_: Défraiement, travel covered, sponsored
 
 **Fit**:
-A Hackathon fits a Profile when it passes all of the Profile's rules.
+A Hackathon fits a Profile when it passes all of the Profile's rules. With Themes, that includes being on-Theme or Open-themed; a Hackathon judged before the person's current Themes were set Fits them until it is rechecked.
 _Avoid_: Match, relevant, in scope
+
+**Open-themed**:
+A Hackathon where participants may build anything, so it Fits whatever Themes a person has.
+_Avoid_: General, themeless, any track
 
 **Alert**:
 A text message telling a person about Hackathons that newly fit them, newly became Travel-funded, or have a Deadline reminder due.

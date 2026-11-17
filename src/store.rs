@@ -6,7 +6,9 @@ use anyhow::Context;
 use chrono::NaiveDate;
 use rusqlite::{Connection, params};
 
-use crate::agent::{ApplicationStatus, INSTRUCTIONS_VERSION, Judgement, TravelFunded};
+use crate::agent::{
+    ApplicationStatus, INSTRUCTIONS_VERSION, Judgement, ThemeAnswer, ThemeFit, TravelFunded,
+};
 use crate::candidate::Candidate;
 
 mod deadlines;
@@ -203,6 +205,14 @@ const MIGRATIONS: &[&str] = &[
         checked_on    TEXT NOT NULL,
         PRIMARY KEY (from_airports, to_airport, outbound_date, return_date, currency)
     );",
+    // Themes (ticket 24, ADR 0010): the Agent's answer about the Profile's
+    // Themes, kept with its judgement: theme_fit, NULL when it wasn't asked (as
+    // when the Profile had no Themes); the Theme, when on-Theme; and the Themes
+    // it was asked about, as a JSON array, since an answer only holds for those.
+    "ALTER TABLE judgements ADD COLUMN theme_fit TEXT
+        CHECK (theme_fit IN ('on_theme', 'open_themed', 'off_theme'));
+    ALTER TABLE judgements ADD COLUMN theme TEXT;
+    ALTER TABLE judgements ADD COLUMN themes_asked TEXT;",
 ];
 
 /// Names a listing: its Source and its key within that Source.
@@ -455,11 +465,9 @@ impl Store {
 
     /// The judgement of one listing, if the Agent has made one.
     pub fn judgement(&self, source: &str, source_key: &str) -> anyhow::Result<Option<Judgement>> {
-        let mut query = self.conn.prepare_cached(
-            "SELECT is_hackathon, eligible, eligibility_restriction, travel_funded, travel_detail,
-                    reason, application_deadline, application_status
-             FROM judgements WHERE source = ?1 AND source_key = ?2",
-        )?;
+        let mut query = self.conn.prepare_cached(&format!(
+            "SELECT {JUDGEMENT_COLUMNS} FROM judgements WHERE source = ?1 AND source_key = ?2"
+        ))?;
         let mut rows =
             query.query_map(params![source, source_key], |row| judgement_from(row, 0))?;
         Ok(rows.next().transpose()?)
@@ -467,22 +475,22 @@ impl Store {
 
     /// Every stored judgement, by listing name.
     pub fn judgements(&self) -> anyhow::Result<Vec<StoredJudgement>> {
-        let mut query = self.conn.prepare(
-            "SELECT is_hackathon, eligible, eligibility_restriction, travel_funded, travel_detail,
-                    reason, application_deadline, application_status,
+        let mut query = self.conn.prepare(&format!(
+            "SELECT {JUDGEMENT_COLUMNS},
                     source, source_key, name, agent, instructions_version, judged_on
              FROM judgements
-             ORDER BY name, source, source_key",
-        )?;
+             ORDER BY name, source, source_key"
+        ))?;
         let rows = query.query_map([], |row| {
+            let at = JUDGEMENT_COLUMN_COUNT;
             Ok(StoredJudgement {
                 judgement: judgement_from(row, 0)?,
-                source: row.get(8)?,
-                source_key: row.get(9)?,
-                name: row.get(10)?,
-                agent: row.get(11)?,
-                instructions_version: row.get(12)?,
-                judged_on: row.get(13)?,
+                source: row.get(at)?,
+                source_key: row.get(at + 1)?,
+                name: row.get(at + 2)?,
+                agent: row.get(at + 3)?,
+                instructions_version: row.get(at + 4)?,
+                judged_on: row.get(at + 5)?,
             })
         })?;
         Ok(rows.collect::<Result<_, _>>()?)
@@ -722,10 +730,10 @@ impl Store {
             "INSERT OR IGNORE INTO judgements
                 (source, source_key, name, is_hackathon, eligible, eligibility_restriction,
                  travel_funded, travel_detail, reason, agent, instructions_version, judged_on,
-                 application_deadline, application_status)
+                 application_deadline, application_status, theme_fit, theme, themes_asked)
              SELECT ?3, ?4, name, is_hackathon, eligible, eligibility_restriction,
                     travel_funded, travel_detail, reason, agent, instructions_version, judged_on,
-                    application_deadline, application_status
+                    application_deadline, application_status, theme_fit, theme, themes_asked
              FROM judgements WHERE source = ?1 AND source_key = ?2",
             params![from.0, from.1, into.0, into.1],
         )?;
@@ -829,10 +837,17 @@ fn upsert_judgements(
         "INSERT OR REPLACE INTO judgements
             (source, source_key, name, is_hackathon, eligible, eligibility_restriction,
              travel_funded, travel_detail, reason, agent, instructions_version, judged_on,
-             application_deadline, application_status)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+             application_deadline, application_status, theme_fit, theme, themes_asked)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
     )?;
     for (c, j) in judged {
+        let theme_fit = j.theme.as_ref().map(|a| a.fit.as_str());
+        let theme = j.theme.as_ref().and_then(|a| a.fit.theme());
+        let themes_asked = j
+            .theme
+            .as_ref()
+            .map(|a| serde_json::to_string(&a.asked))
+            .transpose()?;
         upsert.execute(params![
             c.source,
             c.source_key,
@@ -848,14 +863,23 @@ fn upsert_judgements(
             judged_on,
             j.deadline,
             j.status.as_str(),
+            theme_fit,
+            theme,
+            themes_asked,
         ])?;
     }
     Ok(())
 }
 
-/// Reads the eight judgement columns starting at `first`: is_hackathon,
-/// eligible, eligibility_restriction, travel_funded, travel_detail, reason,
-/// application_deadline and application_status.
+/// The judgement columns [`judgement_from`] reads, in its order.
+const JUDGEMENT_COLUMNS: &str = "is_hackathon, eligible, eligibility_restriction, travel_funded,
+    travel_detail, reason, application_deadline, application_status,
+    theme_fit, theme, themes_asked";
+
+/// How many columns [`JUDGEMENT_COLUMNS`] names.
+const JUDGEMENT_COLUMN_COUNT: usize = 11;
+
+/// Reads the [`JUDGEMENT_COLUMNS`] starting at `first`.
 fn judgement_from(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<Judgement> {
     let unknown = |column: usize, what: &str, value: &str| {
         rusqlite::Error::FromSqlConversionFailure(
@@ -870,6 +894,27 @@ fn judgement_from(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<Jud
     let status: String = row.get(first + 7)?;
     let status = ApplicationStatus::parse(&status)
         .ok_or_else(|| unknown(first + 7, "application_status", &status))?;
+    // No Theme answer when it wasn't asked, as before ticket 24.
+    let theme = match row.get::<_, Option<String>>(first + 8)? {
+        None => None,
+        Some(fit) => {
+            let theme: Option<String> = row.get(first + 9)?;
+            let fit = ThemeFit::parse(&fit, theme)
+                .ok_or_else(|| unknown(first + 8, "theme_fit", &fit))?;
+            let asked: Option<String> = row.get(first + 10)?;
+            let asked: Vec<String> = asked
+                .as_deref()
+                .and_then(|a| serde_json::from_str(a).ok())
+                .ok_or_else(|| {
+                    unknown(
+                        first + 10,
+                        "themes_asked",
+                        asked.as_deref().unwrap_or("NULL"),
+                    )
+                })?;
+            Some(ThemeAnswer { asked, fit })
+        }
+    };
     Ok(Judgement {
         is_hackathon: row.get(first)?,
         eligible: row.get(first + 1)?,
@@ -879,6 +924,7 @@ fn judgement_from(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<Jud
         reason: row.get(first + 5)?,
         deadline: row.get(first + 6)?,
         status,
+        theme,
     })
 }
 
@@ -1015,6 +1061,7 @@ mod tests {
             deadline: NaiveDate::from_ymd_opt(2026, 11, 20),
             status: ApplicationStatus::Open,
             reason: "Builds.".into(),
+            theme: None,
         };
         store
             .save_judgements("fake", &[(&a, judgement.clone())], day)
@@ -1141,5 +1188,85 @@ mod tests {
             },
             "only the failures since the last success count"
         );
+    }
+
+    fn hack(key: &str) -> Candidate {
+        Candidate {
+            source: "s".into(),
+            source_key: key.into(),
+            name: format!("Hack {key}"),
+            start: NaiveDate::from_ymd_opt(2026, 12, 1).unwrap(),
+            end: NaiveDate::from_ymd_opt(2026, 12, 1).unwrap(),
+            city: None,
+            location: None,
+            country: None,
+            link: None,
+        }
+    }
+
+    #[test]
+    fn a_database_at_schema_8_keeps_its_judgements_with_no_theme_answer() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("schema-8.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..8] {
+                conn.execute_batch(migration).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 8).unwrap();
+            conn.execute_batch(
+                "INSERT INTO judgements (source, source_key, name, is_hackathon, eligible,
+                                         travel_funded, reason, agent, instructions_version,
+                                         judged_on, application_status)
+                 VALUES ('s', 'k', 'Old Hack', 1, 1, 'none', 'Builds.', 'fake', '0.1.0',
+                         '2026-11-01', 'open');",
+            )
+            .unwrap();
+        }
+
+        let store = Store::open(&path).unwrap();
+
+        let judgement = store.judgement("s", "k").unwrap().unwrap();
+        assert_eq!(judgement.theme, None);
+        assert_eq!(judgement.status, ApplicationStatus::Open);
+    }
+
+    #[test]
+    fn a_theme_answer_is_stored_and_read_back() {
+        let mut store = Store::open_in_memory().unwrap();
+        let day = NaiveDate::from_ymd_opt(2026, 11, 9).unwrap();
+        let judged = |fit: ThemeFit| Judgement {
+            is_hackathon: true,
+            eligible: true,
+            eligibility_restriction: None,
+            travel_funded: TravelFunded::None,
+            travel_detail: None,
+            deadline: None,
+            status: ApplicationStatus::Unknown,
+            reason: "Builds.".into(),
+            theme: Some(ThemeAnswer {
+                asked: vec!["climate".into(), "AI agents".into()],
+                fit,
+            }),
+        };
+        let (on, open, off) = (hack("on"), hack("open"), hack("off"));
+        let answers = [
+            (&on, judged(ThemeFit::OnTheme("climate".into()))),
+            (&open, judged(ThemeFit::OpenThemed)),
+            (&off, judged(ThemeFit::OffTheme)),
+        ];
+        store.save_judgements("fake", &answers, day).unwrap();
+
+        for (c, j) in &answers {
+            assert_eq!(
+                store.judgement(&c.source, &c.source_key).unwrap().as_ref(),
+                Some(j)
+            );
+        }
+        let stored = store.judgements().unwrap();
+        assert_eq!(stored.len(), 3);
+        assert_eq!(stored[0].name, "Hack off");
+        assert_eq!(stored[0].judgement, answers[2].1);
+        assert_eq!(stored[0].judged_on, day);
     }
 }

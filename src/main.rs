@@ -201,6 +201,9 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
             "warning: the Agent could not recheck deadlines and status; they are rechecked on the next Run: {failure}"
         );
     }
+    if let Some(line) = hackathon_radar::agent::themes_normalised_line(outcome.themes_normalised) {
+        eprintln!("{line}");
+    }
     if let Some(failure) = &outcome.alert_failure {
         eprintln!(
             "warning: the Alert channel could not send the Alert; it is tried again on the next Run: {failure}"
