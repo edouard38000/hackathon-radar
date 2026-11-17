@@ -181,6 +181,7 @@ fn run_steps(
     // Until something has been Announced, the Alert is the Welcome Alert; either
     // way it only covers what no Alert has announced yet, plus Deadline
     // reminders and newly Travel-funded Hackathons decided from the store.
+    // Closed Hackathons are left out, so they stay unannounced until they reopen.
     let kind = if deps.store.has_announced_anything()? {
         AlertKind::New
     } else {

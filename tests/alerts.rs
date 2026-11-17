@@ -3,7 +3,10 @@
 mod support;
 
 use chrono::NaiveDate;
+use hackathon_radar::agent::{ApplicationStatus, Judgement, TravelFunded};
 use hackathon_radar::candidate::Candidate;
+use hackathon_radar::export::sheet;
+use hackathon_radar::report::{self, Scope};
 use hackathon_radar::sources::Source;
 use support::*;
 
@@ -32,6 +35,15 @@ fn listing(names: &[&str]) -> Vec<Box<dyn Source>> {
         name: "fake".into(),
         result: Ok(hackathons),
     })]
+}
+
+/// Judged a Hackathon that Fits, whose applications are closed.
+fn closed(deadline: Option<NaiveDate>) -> Judgement {
+    Judgement {
+        status: ApplicationStatus::Closed,
+        deadline,
+        ..support::hackathon()
+    }
 }
 
 fn texts(harness: &Harness) -> Vec<&str> {
@@ -357,4 +369,143 @@ fn an_alert_that_fails_to_send_announces_nothing_and_is_tried_again() {
         texts(&harness)[0].starts_with("hackathon-radar: welcome! 1 Hackathon already fits you")
     );
     assert_eq!(harness.announced_names(), ["Ghent Hack"]);
+}
+
+// --- Closed Hackathons ---
+
+#[test]
+fn the_welcome_alert_leaves_out_closed_hackathons_and_doesnt_count_them() {
+    let mut harness = Harness::new(profile(&["Belgium"]));
+    // Closed, and soonest, so it would be listed first and push H6 into "+ 1 more".
+    harness.agent = FakeAgent::approving().with_verdict("LauzHack", closed(None));
+    let names = ["LauzHack", "H1", "H2", "H3", "H4", "H5", "H6"];
+
+    let outcome = harness.run(&listing(&names), date(2026, 11, 9), LIVE_RUN);
+
+    assert!(outcome.sent);
+    let [welcome] = texts(&harness)[..] else {
+        panic!("expected exactly one Alert, got {:?}", texts(&harness));
+    };
+    assert!(
+        welcome.starts_with("hackathon-radar: welcome! 6 Hackathons already fit you\n\nH1\n"),
+        "{welcome}"
+    );
+    assert!(!welcome.contains("LauzHack"), "{welcome}");
+    assert!(!welcome.contains("Closed"), "{welcome}");
+    assert!(!welcome.contains("more"), "{welcome}");
+    assert_eq!(outcome.announced, 6);
+    // It still Fits and stays stored; it just isn't Announced while closed.
+    assert!(outcome.fitting.iter().any(|h| h.name == "LauzHack"));
+    assert!(harness.stored_names().contains(&"LauzHack".to_owned()));
+    assert_eq!(harness.announced_names(), &names[1..]);
+}
+
+#[test]
+fn a_later_alert_leaves_out_a_closed_hackathon_and_one_that_closed_since() {
+    let mut harness = Harness::new(profile(&["Belgium"]));
+    harness.run(&listing(&["Ghent Hack"]), date(2026, 11, 9), LIVE_RUN);
+
+    // Lovable Hack is judged closed; Bruges Hack's deadline passes before the
+    // Run that finds it, which means closed too.
+    harness.agent = FakeAgent::approving()
+        .with_verdict("Lovable Hack", closed(None))
+        .with_verdict("Bruges Hack", open_until(date(2026, 11, 10)));
+    let only_closed = harness.run(
+        &listing(&["Ghent Hack", "Lovable Hack"]),
+        date(2026, 11, 12),
+        LIVE_RUN,
+    );
+    assert_eq!(only_closed.alert, None, "nothing open is new");
+    assert!(!only_closed.sent);
+
+    let names = ["Ghent Hack", "Lovable Hack", "Bruges Hack", "Mons Hack"];
+    let later = harness.run(&listing(&names), date(2026, 11, 16), LIVE_RUN);
+
+    assert_eq!(
+        later.alert.unwrap().text,
+        "hackathon-radar: 1 Hackathon newly fits you
+
+Mons Hack
+Ghent, 4 Dec 2026
+Status unknown · deadline unknown
+https://example.org/Mons-Hack"
+    );
+    assert_eq!(harness.announced_names(), ["Ghent Hack", "Mons Hack"]);
+}
+
+#[test]
+fn a_closed_hackathon_that_reopens_is_announced_then() {
+    let mut harness = Harness::new(profile(&["Belgium"]));
+    harness.agent = FakeAgent::approving().with_verdict("EDTH Paris", closed(None));
+    let names = ["Ghent Hack", "EDTH Paris"];
+    harness.run(&listing(&names), date(2026, 11, 9), LIVE_RUN);
+    assert_eq!(harness.announced_names(), ["Ghent Hack"]);
+
+    // Its waitlist opens, and the store holds that as it holds any recheck.
+    let waitlist = Judgement {
+        status: ApplicationStatus::Waitlist,
+        ..support::hackathon()
+    };
+    harness.agent.set_verdict("EDTH Paris", waitlist.clone());
+    let edth = hackathon("EDTH Paris", date(2026, 12, 2));
+    harness
+        .store
+        .save_rechecks("fake", &[(&edth, waitlist)], date(2026, 11, 10))
+        .unwrap();
+    let reopened = harness.run(&listing(&names), date(2026, 11, 10), LIVE_RUN);
+
+    assert_eq!(
+        reopened.alert.unwrap().text,
+        "hackathon-radar: 1 Hackathon newly fits you
+
+EDTH Paris
+Ghent, 2 Dec 2026
+Waitlist · deadline unknown
+https://example.org/EDTH-Paris"
+    );
+    assert_eq!(harness.announced_names(), names);
+}
+
+#[test]
+fn a_hackathon_that_closes_gets_no_reminder_and_no_travel_funded_news() {
+    let mut harness = Harness::new(profile(&["Belgium"]));
+    harness.run(&listing(&["Ghent Hack"]), date(2026, 11, 9), LIVE_RUN);
+
+    // The recheck finds it Travel-funded, with a deadline in the reminder
+    // window, but closed.
+    harness.agent.set_verdict(
+        "Ghent Hack",
+        Judgement {
+            travel_funded: TravelFunded::Full,
+            travel_detail: Some("Flights and hotel".into()),
+            ..closed(Some(date(2026, 11, 14)))
+        },
+    );
+    let run = harness.run(&listing(&["Ghent Hack"]), date(2026, 11, 12), LIVE_RUN);
+
+    assert_eq!(run.rechecked, 1);
+    assert_eq!(run.alert, None);
+    assert_eq!(texts(&harness).len(), 1, "only the Welcome Alert");
+}
+
+#[test]
+fn report_all_and_the_sheet_still_include_a_closed_hackathon() {
+    let mut harness = Harness::new(profile(&["Belgium"]));
+    harness.agent = FakeAgent::approving().with_verdict("LauzHack", closed(None));
+    let today = date(2026, 11, 9);
+    harness.run(&listing(&["Ghent Hack", "LauzHack"]), today, LIVE_RUN);
+    assert!(!texts(&harness)[0].contains("LauzHack"));
+
+    let collect = |scope| report::collect(&harness.store, &harness.profile, today, scope).unwrap();
+    let names = |scope| -> Vec<String> {
+        collect(scope)
+            .into_iter()
+            .map(|l| l.hackathon.name)
+            .collect()
+    };
+    assert_eq!(names(Scope::Fitting), ["Ghent Hack"]);
+    assert_eq!(names(Scope::All), ["Ghent Hack", "LauzHack"]);
+
+    let exported = sheet::sheet(&collect(Scope::All), &harness.profile, today).unwrap();
+    assert!(exported.text.contains("LauzHack"), "{}", exported.text);
 }
