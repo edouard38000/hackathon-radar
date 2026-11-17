@@ -8,7 +8,7 @@ use std::path::Path;
 use chrono::{Days, NaiveDate};
 use hackathon_radar::agent::{INSTRUCTIONS_VERSION, TravelFunded};
 use hackathon_radar::candidate::Candidate;
-use hackathon_radar::judging::MAX_CANDIDATES_PER_RUN;
+use hackathon_radar::judging::{ByCountries, MAX_CANDIDATES_PER_RUN, Tally};
 use hackathon_radar::profile::{Eligibility, Profile};
 use hackathon_radar::sources::Source;
 use support::*;
@@ -411,15 +411,49 @@ fn candidates_outside_countries_are_judged_every_run_while_more_in_countries_wai
 
     // Forty wait in Countries, more than two batches hold, yet each Run also
     // judges the soonest of those outside Countries.
-    for day in [17, 18, 19] {
-        harness.run(&listing(&listed), date(2026, 11, day), DRY_RUN);
-    }
+    let tallies: Vec<Tally> = [17, 18, 19]
+        .into_iter()
+        .map(|day| {
+            harness
+                .run(&listing(&listed), date(2026, 11, day), DRY_RUN)
+                .judging
+        })
+        .collect();
 
+    let split = |in_countries, outside| ByCountries {
+        in_countries,
+        outside,
+    };
+    assert_eq!(
+        tallies,
+        [
+            Tally {
+                judged: split(15, 5),
+                waiting: split(25, 7),
+            },
+            Tally {
+                judged: split(15, 5),
+                waiting: split(10, 2),
+            },
+            Tally {
+                judged: split(10, 2),
+                waiting: split(0, 0),
+            },
+        ]
+    );
     let expected = [
         [numbered("Ghent Hack", 1, 15), numbered("Boston Hack", 1, 5)].concat(),
-        [numbered("Ghent Hack", 16, 30), numbered("Boston Hack", 6, 10)].concat(),
+        [
+            numbered("Ghent Hack", 16, 30),
+            numbered("Boston Hack", 6, 10),
+        ]
+        .concat(),
         // Ten left in Countries: the share they don't use goes to those outside.
-        [numbered("Ghent Hack", 31, 40), numbered("Boston Hack", 11, 12)].concat(),
+        [
+            numbered("Ghent Hack", 31, 40),
+            numbered("Boston Hack", 11, 12),
+        ]
+        .concat(),
     ];
     assert_eq!(*harness.agent.asked.borrow(), expected);
     assert!(harness.unjudged_names().is_empty());
@@ -481,8 +515,8 @@ fn started_candidates_leave_the_queue_without_being_sent_to_the_agent() {
     );
     assert_eq!(harness.unjudged_names().len(), 4);
 
-    // A week later two of the queued have started, and the Source lists only
-    // a new one that started yesterday.
+    // A week later one of the queued has started and one starts today, and
+    // the Source lists only a new one that started yesterday.
     harness.agent = FakeAgent::approving();
     let fresh = Candidate {
         end: date(2026, 11, 19),
@@ -492,8 +526,13 @@ fn started_candidates_leave_the_queue_without_being_sent_to_the_agent() {
 
     assert_eq!(
         *harness.agent.asked.borrow(),
-        [names(&["Devpost Hack", "Next Week Hack"])]
+        [names(&[
+            "Devpost Hack",
+            "Starts Today Hack",
+            "Next Week Hack"
+        ])],
+        "only those whose start date is past are left out"
     );
-    assert_eq!((next.judged, next.unjudged), (2, 0));
+    assert_eq!((next.judged, next.unjudged), (3, 0));
     assert!(harness.unjudged_names().is_empty());
 }
