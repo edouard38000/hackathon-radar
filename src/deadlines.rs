@@ -340,6 +340,7 @@ mod tests {
             deadline,
             status,
             reason: "Teams build software.".into(),
+            theme: None,
         }
     }
 

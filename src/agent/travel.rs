@@ -78,6 +78,7 @@ impl<'a> TravelRequest<'a> {
             eligibility: &self.profile.eligibility,
             prompt: self.prompt.clone(),
             schema: TRAVEL_SCHEMA,
+            themes: &[],
             step_cap: Some(StepCap {
                 max_turns: self.profile.agent.travel_max_turns,
                 setting: "agent.travel_max_turns",

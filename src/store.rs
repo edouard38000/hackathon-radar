@@ -879,6 +879,7 @@ fn judgement_from(row: &rusqlite::Row<'_>, first: usize) -> rusqlite::Result<Jud
         reason: row.get(first + 5)?,
         deadline: row.get(first + 6)?,
         status,
+        theme: None,
     })
 }
 
@@ -1015,6 +1016,7 @@ mod tests {
             deadline: NaiveDate::from_ymd_opt(2026, 11, 20),
             status: ApplicationStatus::Open,
             reason: "Builds.".into(),
+            theme: None,
         };
         store
             .save_judgements("fake", &[(&a, judgement.clone())], day)

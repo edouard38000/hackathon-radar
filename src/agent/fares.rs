@@ -73,6 +73,7 @@ impl<'a> FareRequest<'a> {
             eligibility: &self.profile.eligibility,
             prompt: self.prompt.clone(),
             schema: FARES_SCHEMA,
+            themes: &[],
             step_cap: Some(StepCap {
                 max_turns: self.profile.agent.fare_max_turns,
                 setting: "agent.fare_max_turns",

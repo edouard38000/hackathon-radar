@@ -12,7 +12,7 @@ use tempfile::TempDir;
 use hackathon_radar::agent::fares::FARES_SCHEMA;
 use hackathon_radar::agent::travel::TRAVEL_SCHEMA;
 use hackathon_radar::agent::{
-    Agent, ApplicationStatus, JudgeRequest, Judgement, RECHECK_NOTE, TravelFunded,
+    Agent, ApplicationStatus, JudgeRequest, Judgement, RECHECK_NOTE, ThemeFit, TravelFunded,
 };
 use hackathon_radar::alert::{Alert, AlertChannel};
 use hackathon_radar::candidate::Candidate;
@@ -182,6 +182,12 @@ pub struct FakeAgent {
     pub asked: RefCell<Vec<Vec<String>>>,
     /// The Eligibility facts sent with each request.
     pub eligibility: RefCell<Vec<Eligibility>>,
+    /// How each Candidate relates to the Themes, by name, when a request asks
+    /// about Themes; any other Candidate is open-themed.
+    pub theme_fits: Vec<(String, ThemeFit)>,
+    /// The Themes each judging or recheck request asked about, empty when it
+    /// asked about none.
+    pub themes_asked: RefCell<Vec<Vec<String>>>,
     /// Travel estimates by destination city: train hours and airport, `None`
     /// for no practical train or flight. Cities not listed are left out of the
     /// answer, so they get no Trip yet.
@@ -223,6 +229,8 @@ impl FakeAgent {
             leave_out: Vec::new(),
             asked: RefCell::new(Vec::new()),
             eligibility: RefCell::new(Vec::new()),
+            theme_fits: Vec::new(),
+            themes_asked: RefCell::new(Vec::new()),
             estimates: Vec::new(),
             travel_raw: None,
             travel_asked: RefCell::new(Vec::new()),
@@ -240,6 +248,18 @@ impl FakeAgent {
     pub fn set_verdict(&mut self, name: &str, judgement: Judgement) {
         self.verdicts.retain(|(n, _)| n != name);
         self.verdicts.push((name.to_owned(), judgement));
+    }
+
+    /// Answers that `name` relates to the Themes this way, when asked.
+    pub fn with_theme_fit(mut self, name: &str, fit: ThemeFit) -> Self {
+        self.set_theme_fit(name, fit);
+        self
+    }
+
+    /// Replaces how `name` relates to the Themes, as when its page changes between Runs.
+    pub fn set_theme_fit(&mut self, name: &str, fit: ThemeFit) {
+        self.theme_fits.retain(|(n, _)| n != name);
+        self.theme_fits.push((name.to_owned(), fit));
     }
 
     pub fn recheck_requests(&self) -> usize {
@@ -442,6 +462,7 @@ impl Agent for FakeAgent {
         self.eligibility
             .borrow_mut()
             .push(request.eligibility.clone());
+        self.themes_asked.borrow_mut().push(request.themes.to_vec());
         match &self.answer {
             FakeAnswer::Fail(error) => anyhow::bail!("{error}"),
             FakeAnswer::Raw(text) => Ok(text.clone()),
@@ -456,7 +477,7 @@ impl Agent for FakeAgent {
                             .iter()
                             .find(|(name, _)| *name == sent.candidate.name)
                             .map_or(&self.default, |(_, j)| j);
-                        serde_json::json!({
+                        let mut answer = serde_json::json!({
                             "id": sent.id,
                             "is_hackathon": j.is_hackathon,
                             "eligible": j.eligible,
@@ -466,7 +487,23 @@ impl Agent for FakeAgent {
                             "application_deadline": j.deadline.map(|d| d.to_string()),
                             "application_status": j.status,
                             "reason": j.reason,
-                        })
+                        });
+                        // Only a request that asks about Themes gets an answer about them.
+                        if !request.themes.is_empty() {
+                            let fit = self
+                                .theme_fits
+                                .iter()
+                                .find(|(name, _)| *name == sent.candidate.name)
+                                .map_or(&ThemeFit::OpenThemed, |(_, fit)| fit);
+                            let (theme_fit, theme) = match fit {
+                                ThemeFit::OnTheme(theme) => ("on_theme", Some(theme.as_str())),
+                                ThemeFit::OpenThemed => ("open_themed", None),
+                                ThemeFit::OffTheme => ("off_theme", None),
+                            };
+                            answer["theme_fit"] = theme_fit.into();
+                            answer["theme"] = theme.into();
+                        }
+                        answer
                     })
                     .collect();
                 Ok(serde_json::json!({ "judgements": judgements }).to_string())
@@ -531,6 +568,7 @@ pub fn hackathon() -> Judgement {
         deadline: None,
         status: ApplicationStatus::Unknown,
         reason: "Teams build software over a weekend.".into(),
+        theme: None,
     }
 }
 
@@ -579,6 +617,23 @@ pub fn travel_profile(countries: &[&str], travel: &str) -> Profile {
     let text = format!(
         "countries = [{countries}]\n\n[home]\ncity = \"Brussels\"\ncountry = \"Belgium\"\n\
          airports = [\"BRU\", \"CRL\"]\n{travel}"
+    );
+    Profile::from_toml(&text, Path::new("test-profile.toml")).unwrap()
+}
+
+/// A Profile in Belgium, like [`profile`], with these Themes.
+pub fn themed_profile(countries: &[&str], themes: &[&str]) -> Profile {
+    let list = |items: &[&str]| {
+        items
+            .iter()
+            .map(|c| format!("{c:?}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let text = format!(
+        "countries = [{}]\nthemes = [{}]\n\n[home]\ncity = \"Brussels\"\nairports = [\"BRU\", \"CRL\"]\n",
+        list(countries),
+        list(themes)
     );
     Profile::from_toml(&text, Path::new("test-profile.toml")).unwrap()
 }

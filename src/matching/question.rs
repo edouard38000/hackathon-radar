@@ -72,6 +72,7 @@ pub fn request<'a>(
         eligibility: &profile.eligibility,
         prompt,
         schema: SCHEMA,
+        themes: &[],
         // Reading two pages a pair fits well within the Profile's `agent.max_turns`.
         step_cap: None,
     }

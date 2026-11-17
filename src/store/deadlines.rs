@@ -324,6 +324,7 @@ mod tests {
             deadline: Some(date(20)),
             status: ApplicationStatus::Open,
             reason: "Builds.".into(),
+            theme: None,
         };
         store
             .save_judgements("fake", &[(&hack, judgement)], date(1))

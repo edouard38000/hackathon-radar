@@ -133,6 +133,9 @@ pub struct JudgeRequest<'a> {
     /// The full prompt, with the Eligibility facts and Candidates filled in.
     pub prompt: String,
     pub schema: &'static str,
+    /// The Profile's Themes the Agent is asked about, empty when it has none
+    /// or the request isn't judging Candidates.
+    pub themes: &'a [String],
     /// This request's own step cap, for adapters that take one; `None` uses the
     /// adapter's, which is the Profile's `agent.max_turns`.
     pub step_cap: Option<StepCap>,
@@ -187,6 +190,7 @@ impl<'a> JudgeRequest<'a> {
             eligibility: &profile.eligibility,
             prompt,
             schema: SCHEMA,
+            themes: &[],
             step_cap: None,
         }
     }
@@ -241,6 +245,7 @@ impl<'a> JudgeRequest<'a> {
                     deadline,
                     status: item.application_status,
                     reason: item.reason.trim().to_owned(),
+                    theme: None,
                 },
             ));
         }
@@ -270,6 +275,28 @@ pub struct Judgement {
     /// Whether applications are open, as the Agent found them.
     pub status: ApplicationStatus,
     pub reason: String,
+    /// The Agent's answer about the Profile's Themes, with the Themes it was
+    /// asked about; `None` when it wasn't asked, as when the Profile had no Themes.
+    pub theme: Option<ThemeAnswer>,
+}
+
+/// Whether a Hackathon is about the person's Themes, as the Agent answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ThemeAnswer {
+    /// The Themes the Agent was asked about, as the Profile listed them.
+    pub asked: Vec<String>,
+    pub fit: ThemeFit,
+}
+
+/// How a Hackathon relates to the Themes the Agent was asked about.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ThemeFit {
+    /// About this Theme, one of those asked, as the Profile spells it.
+    OnTheme(String),
+    /// Open-themed: participants may build anything, so it Fits any Themes.
+    OpenThemed,
+    /// Clearly about something else.
+    OffTheme,
 }
 
 impl Judgement {
@@ -608,6 +635,7 @@ mod tests {
             travel_funded: TravelFunded::None,
             travel_detail: None,
             reason: "Builds.".into(),
+            theme: None,
         };
         let on = |d| judgement.status_on(NaiveDate::from_ymd_opt(2026, 11, d).unwrap());
         assert_eq!(on(28), ApplicationStatus::Open);
@@ -673,6 +701,7 @@ mod tests {
                 deadline: NaiveDate::from_ymd_opt(2026, 11, 28),
                 status: ApplicationStatus::OpenUntilFull,
                 reason: "A 48-hour build event.".into(),
+                theme: None,
             }
         );
         assert!(judged[0].1.fits());
