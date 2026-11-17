@@ -141,16 +141,23 @@ These respect `XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `XDG_STATE_HOME`; remove an
 ## Releasing (maintainers)
 
 1. Bump `package.version` in `Cargo.toml` and refresh `Cargo.lock`. Run the CI checks and review `cargo package --list --allow-dirty`; the crate should include the runtime sources and Photon sidecar but no `node_modules` or test fixtures. Commit the reviewed version change.
-2. From that commit, optionally run the Release workflow with `workflow_dispatch`. It builds and uploads Actions artifacts for all four targets, without creating or uploading a GitHub Release.
-3. Tag and push the version (for example, after bumping to 0.1.0):
+2. From that commit, run the live end-to-end test on your Mac (or a Linux machine) with the network and a signed-in `claude` on the `PATH`. It must print `PASSED`; a `SKIPPED` line means it checked nothing:
+
+   ```sh
+   cargo test --locked --test live -- --ignored
+   ```
+
+   It repeats the manual release check against the real world in about ten minutes: `init` with a test Alert over ntfy, `doctor --json`, two dry runs around a real Run whose Welcome Alert must reach ntfy.sh, and `schedule install` and `uninstall`. It uses a temporary Profile, database and directories, and leaves nothing behind but a few ntfy messages on a random topic. It refuses to start while a hackathon-radar schedule is installed, so run `schedule uninstall` first on a machine that has one, and `schedule install` again afterwards. See the README's [Development](https://github.com/edouard38000/hackathon-radar#the-live-end-to-end-test) section for what it checks and leaves behind.
+3. Optionally run the Release workflow with `workflow_dispatch` from that commit. It builds and uploads Actions artifacts for all four targets, without creating or uploading a GitHub Release.
+4. Tag and push the version (for example, after bumping to 0.1.0):
 
    ```sh
    git tag v0.1.0
    git push origin v0.1.0
    ```
 
-4. Check the workflow and [GitHub Release](https://github.com/edouard38000/hackathon-radar/releases). The tag must equal `v` plus the Cargo version or validation fails. Each archive must contain one `hackathon-radar-<version>-<target>/` directory holding the executable, `sidecar/photon` (with `.npmrc`, without `node_modules`), README, both licences and this guide, plus a separate SHA-256 checksum for the archive. Smoke-test the extracted binaries on their platforms, especially the cross-compiled Intel macOS build.
-5. Publish to crates.io **manually**, from the clean, reviewed tagged checkout with your own crates.io credentials:
+5. Check the workflow and [GitHub Release](https://github.com/edouard38000/hackathon-radar/releases). The tag must equal `v` plus the Cargo version or validation fails. Each archive must contain one `hackathon-radar-<version>-<target>/` directory holding the executable, `sidecar/photon` (with `.npmrc`, without `node_modules`), README, both licences and this guide, plus a separate SHA-256 checksum for the archive. Smoke-test the extracted binaries on their platforms, especially the cross-compiled Intel macOS build.
+6. Publish to crates.io **manually**, from the clean, reviewed tagged checkout with your own crates.io credentials:
 
    ```sh
    cargo publish --dry-run --locked

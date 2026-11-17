@@ -25,10 +25,17 @@ This project generalises Edouard's personal hackathon tracker, which has been ru
 7. **All data lives on the user's machine.**
 8. **Rust first** wherever possible (cargo, clippy, rustfmt).
 
-## Open questions for the grilling
+## What was decided
 
-- **Results storage:** a Google Sheet like today, or a local store (file or SQLite) with an optional Sheet export.
-- **Agent runtime:** a Claude app scheduled task (needs the app open), or headless `claude -p` started by cron or launchd from a Rust CLI.
-- **What the Rust CLI owns:** setup wizard, preferences file, deterministic feed fetching (to cut agent cost), notifications.
-- **Fallback alerts** for users without Photon (ntfy, email), or Photon only.
-- **License:** MIT or Apache-2.0.
+The open questions from 2026-11-03 were settled in the grilling that followed, and each decision is recorded as an ADR in [`adr/`](adr/):
+
+- **Self-hosted only**, with no hosted version: [ADR 0001](adr/0001-self-hosted-only.md).
+- **What the Rust CLI owns and how the Agent runs:** the CLI fetches, filters, stores and alerts; a launchd or systemd schedule starts the CLI, which runs the person's own Agent headless (`claude -p`, `codex exec` or a command template) only for what needs judgement: [ADR 0002](adr/0002-cli-filters-agent-judges.md). It may only search and read the web: [ADR 0004](adr/0004-agent-is-read-only.md). Its instructions ship in the binary: [ADR 0006](adr/0006-agent-instructions-ship-in-the-binary.md).
+- **Results storage:** a local SQLite database is the source of truth; reports and a Google Sheet CSV are only exports: [ADR 0003](adr/0003-sqlite-source-of-truth.md).
+- **Alerts:** Photon iMessage through a small Node sidecar, with ntfy as the no-signup fallback channel: [ADR 0005](adr/0005-photon-node-sidecar.md).
+- **Setup** goes through the person's own coding agent, driving `hackathon-radar init`: [ADR 0007](adr/0007-coding-agents-are-the-front-door.md).
+- **Duplicate listings** are matched by rules in SQLite, with the Agent settling the rest: [ADR 0008](adr/0008-duplicates-matched-without-vectors.md).
+- **Worldwide** from v1, with regional Source packs: [ADR 0009](adr/0009-worldwide-with-source-packs.md).
+- **Licence:** MIT or Apache-2.0, at the user's option (see the README).
+
+The words these use are defined in [`GLOSSARY.md`](../GLOSSARY.md).

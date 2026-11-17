@@ -1,0 +1,87 @@
+name: Bug report
+description: Something in hackathon-radar doesn't work as it should.
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. For a security problem, don't file an issue: report it privately as [SECURITY.md](https://github.com/edouard38000/hackathon-radar/blob/main/SECURITY.md) says.
+
+        Never paste a key, token, Photon credential or your phone number here. `hackathon-radar doctor --json` never prints secrets, but check anything else you paste.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you ran and what went wrong. Include the error or the part of the output that's wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: The commands, and the parts of your Profile that matter (Home, Countries, Agent, Alert channel…).
+      placeholder: |
+        1. hackathon-radar init --yes ...
+        2. hackathon-radar run --dry-run
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `hackathon-radar --version`.
+      placeholder: hackathon-radar 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Linux (x86_64)
+        - Linux (arm64)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - Release archive
+        - crates.io (cargo install hackathon-radar)
+        - From a checkout
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      options:
+        - Claude Code
+        - Codex (experimental)
+        - Another coding agent (command template)
+        - Not relevant
+  - type: dropdown
+    id: alert-channel
+    attributes:
+      label: Alert channel
+      options:
+        - Photon (iMessage)
+        - ntfy
+        - None
+        - Not relevant
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `hackathon-radar doctor --json`
+      description: Optional, but it usually shows what's wrong.
+      render: json

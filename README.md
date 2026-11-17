@@ -275,6 +275,18 @@ cargo test
 
 Tests never touch the network or your keychain: Sources read saved fixtures from `tests/fixtures/`, no test runs a real Agent, no test reaches Photon, and secrets go to a fake keychain. The Photon channel's Rust tests and the sidecar's own tests (with a fake Photon SDK) check the same recorded sidecar outputs in `tests/fixtures/photon/`. `tests/setup_skill.rs` keeps the setup skill in step with the CLI: every flag it mentions must exist, every `init` question must have its flag in it, no secret may go on a command line, and its example `init` commands are run against a fake machine.
 
+### The live end-to-end test
+
+`tests/live.rs` is the one test that touches the real world. It is ignored by default, so `cargo test` and CI never run it; the maintainer runs it on purpose before tagging a release (see the setup guide's [Releasing](docs/setup-guide.md#releasing-maintainers) section), on a machine with the network and a signed-in `claude` on the `PATH`:
+
+```sh
+cargo test --locked --test live -- --ignored
+```
+
+It drives the built binary with a temporary Profile, database and XDG directories: `init --yes` (Home Brussels, ntfy on a fresh random topic, a test Alert, no schedule) and a check that the test Alert reached ntfy.sh; `doctor --json` with `ok: true`; `run --dry-run`, which must collect Candidates and print a Welcome Alert; a real `run`, whose Alert must reach ntfy.sh and whose Hackathons must be Announced; a second `run --dry-run`, which must list no Announced Hackathon again (except as a Deadline reminder or newly Travel-funded); then `schedule install`, `status` and `uninstall`. It takes about ten minutes, most of it the Agent judging, and prints each step as it goes.
+
+Without the network or a signed-in `claude`, it says why and passes as skipped. It refuses to start if a hackathon-radar schedule is already installed, because installing its own would replace yours; a drop guard removes the schedule it installs even when a step fails. On macOS the schedule commands get a temporary `HOME`, so even the plist stays in the temporary directory; on Linux the systemd units go in your own unit directory and are removed again. It never writes to your Profile, data or keychain, and leaves nothing behind but a few ntfy messages on its own topic. Runs still read the keychain as any Run does, so a SerpApi key you stored with `init` is used for Fares. The Agent is your real `claude`, so the test uses some of your Claude usage, and Claude Code keeps its usual session history.
+
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.
