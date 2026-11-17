@@ -99,8 +99,16 @@ fn stored_hackathons_keep_their_listing_details() {
 fn a_hackathon_ending_today_still_fits() {
     let mut harness = Harness::new(profile(&["Belgium"]));
 
-    // EUROAVIA Ideathon runs 3–8 Nov 2026.
-    harness.run(&[hackathon_be_from_fixture()], date(2026, 11, 8), DRY_RUN);
+    // EUROAVIA Ideathon runs 3–8 Nov 2026. It is judged before it starts:
+    // once its start date is past, a Candidate is no longer sent to the Agent.
+    harness.run(&[hackathon_be_from_fixture()], date(2026, 11, 2), DRY_RUN);
+    let last_day = harness.run(&[hackathon_be_from_fixture()], date(2026, 11, 8), DRY_RUN);
+    assert!(
+        last_day
+            .fitting
+            .iter()
+            .any(|h| h.name == "EUROAVIA Ideathon")
+    );
     assert!(
         harness
             .stored_names()

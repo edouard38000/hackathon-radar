@@ -221,10 +221,7 @@ fn run_command(args: RunArgs) -> anyhow::Result<ExitCode> {
             outcome.duplicates, outcome.waiting_on_duplicates
         );
     }
-    println!(
-        "The Agent judged {} Candidates; {} wait for the next Run.",
-        outcome.judged, outcome.unjudged
-    );
+    println!("{}", outcome.judging.summary());
     if profile.travel.flight_budget.is_some() {
         println!(
             "{} {} Fares; {} flights are over the Flight budget and {} wait for a Fare.",

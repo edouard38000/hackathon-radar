@@ -64,6 +64,8 @@ pub struct RunOutcome {
     pub judged: usize,
     /// How many Candidates are still waiting for the Agent; the next Run sends them again.
     pub unjudged: usize,
+    /// The judged and waiting Candidates, in Countries and outside them.
+    pub judging: judging::Tally,
     /// Why the Agent couldn't judge this Run, if it couldn't.
     pub agent_failure: Option<String>,
     /// How many destination cities still wait for a travel estimate.
@@ -238,8 +240,9 @@ fn run_steps(
         alert_failure,
         needs_attention: attention.is_some(),
         failure,
-        judged: judged.judged_now,
-        unjudged: judged.unjudged,
+        judged: judged.tally.judged.total(),
+        unjudged: judged.tally.waiting.total(),
+        judging: judged.tally,
         agent_failure,
         unestimated: travelled.unestimated,
         travel_failure: travelled.failure,
