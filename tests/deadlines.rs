@@ -375,6 +375,129 @@ fn a_failed_recheck_keeps_the_hackathons_due_and_the_run_goes_on() {
     assert_eq!(rechecked(&harness).len(), 2);
 }
 
+// --- Closed Hackathons that may reopen ---
+
+#[test]
+fn a_closed_hackathon_with_an_unknown_deadline_is_rechecked_and_announced_when_it_reopens() {
+    let mut harness = Harness::new(profile(&["Belgium"]));
+    harness.agent = FakeAgent::approving()
+        .with_verdict("EDTH Paris", with_status(ApplicationStatus::Closed, None));
+    let listed = source(&[
+        ghent("Ghent Hack", date(2026, 12, 10)),
+        ghent("EDTH Paris", date(2026, 12, 2)),
+    ]);
+    harness.run(&listed, date(2026, 11, 9), LIVE_RUN);
+    assert_eq!(harness.announced_names(), ["Ghent Hack"]);
+
+    // A second application round opens.
+    harness
+        .agent
+        .set_verdict("EDTH Paris", open_until(date(2026, 11, 30)));
+    // Three days on, the open one is due but the closed one waits twice as long.
+    let early = harness.run(&listed, date(2026, 11, 12), LIVE_RUN);
+    assert_eq!(rechecked(&harness), [["Ghent Hack"]]);
+    assert_eq!(early.alert, None);
+
+    let reopened = harness.run(&listed, date(2026, 11, 15), LIVE_RUN);
+
+    assert_eq!(rechecked(&harness)[1], ["Ghent Hack", "EDTH Paris"]);
+    assert_eq!(
+        reopened.alert.unwrap().text,
+        "hackathon-radar: 1 Hackathon newly fits you
+
+EDTH Paris
+Ghent, 2 Dec 2026
+Open · deadline 30 Nov 2026
+https://example.org/EDTH-Paris"
+    );
+    assert_eq!(harness.announced_names(), ["EDTH Paris", "Ghent Hack"]);
+    let status: Vec<_> = harness
+        .store
+        .judgement_changes("fake", "EDTH Paris")
+        .unwrap()
+        .into_iter()
+        .filter(|c| c.field == "application_status")
+        .map(|c| (c.old_value, c.new_value))
+        .collect();
+    assert_eq!(status, [(Some("closed".into()), Some("open".into()))]);
+}
+
+#[test]
+fn a_closed_hackathon_whose_deadline_has_passed_or_that_has_started_is_never_rechecked() {
+    let mut harness = Harness::new(profile(&["Belgium"]));
+    harness.agent = FakeAgent::approving()
+        .with_verdict(
+            "Passed Deadline",
+            with_status(ApplicationStatus::Closed, Some(date(2026, 11, 20))),
+        )
+        .with_verdict("Started", with_status(ApplicationStatus::Closed, None))
+        .with_verdict(
+            "Future Deadline",
+            with_status(ApplicationStatus::Closed, Some(date(2026, 12, 5))),
+        );
+    let started = Candidate {
+        end: date(2026, 11, 30),
+        ..ghent("Started", date(2026, 11, 21))
+    };
+    let listed = source(&[
+        ghent("Passed Deadline", date(2026, 12, 10)),
+        started,
+        ghent("Future Deadline", date(2026, 12, 12)),
+    ]);
+    harness.run(&listed, date(2026, 11, 9), LIVE_RUN);
+
+    // On the 15th all three may still reopen; from the 21st only one can.
+    for day in [15, 21, 27] {
+        harness.run(&listed, date(2026, 11, day), LIVE_RUN);
+    }
+
+    assert_eq!(
+        rechecked(&harness),
+        [
+            vec!["Started", "Passed Deadline", "Future Deadline"],
+            vec!["Future Deadline"],
+            vec!["Future Deadline"],
+        ]
+    );
+}
+
+#[test]
+fn closed_hackathons_are_rechecked_less_often_and_never_crowd_open_ones_out() {
+    let mut harness = Harness::new(travel_profile(
+        &["Belgium"],
+        "[deadlines]\nrechecks_per_run = 3\n",
+    ));
+    let closed = with_status(ApplicationStatus::Closed, None);
+    harness.agent = FakeAgent::approving()
+        .with_verdict("Closed Late", closed.clone())
+        .with_verdict("Closed Soon", closed);
+    let listed = source(&[
+        ghent("Open A", date(2026, 12, 3)),
+        ghent("Open B", date(2026, 12, 4)),
+        ghent("Open C", date(2026, 12, 5)),
+        ghent("Closed Late", date(2026, 12, 9)),
+        ghent("Closed Soon", date(2026, 12, 1)),
+    ]);
+    harness.run(&listed, date(2026, 11, 9), LIVE_RUN);
+
+    // The 12th: only the open ones are due. The 15th: all five are, and the
+    // open ones fill the batch. The 16th: the open ones were just checked,
+    // and the closed ones get a small share, soonest first.
+    for day in [12, 15, 16, 17] {
+        harness.run(&listed, date(2026, 11, day), LIVE_RUN);
+    }
+
+    assert_eq!(
+        rechecked(&harness),
+        [
+            vec!["Open A", "Open B", "Open C"],
+            vec!["Open A", "Open B", "Open C"],
+            vec!["Closed Soon"],
+            vec!["Closed Late"],
+        ]
+    );
+}
+
 // --- Newly Travel-funded ---
 
 #[test]

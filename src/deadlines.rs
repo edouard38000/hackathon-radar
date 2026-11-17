@@ -17,10 +17,16 @@
 //!   is eligible for), passes the data-only rules, Fits or would Fit if
 //!   Travel-funded (outside Countries under the Travel-funded rule), Fits the
 //!   Themes (so one judged before the Themes were set is rechecked, and gets
-//!   its Theme answer, while an off-Theme one isn't), is not closed, and
-//!   starts within `recheck_horizon_days`;
+//!   its Theme answer, while an off-Theme one isn't), and starts within
+//!   `recheck_horizon_days`;
 //! - never one judged or rechecked fewer than `recheck_every_days` ago;
 //! - nearest deadline first (unknown deadlines last), then nearest start date;
+//! - a closed one only while it could still reopen (a waitlist, a second
+//!   round, or a mistaken "closed"): its deadline is unknown or hasn't passed
+//!   and it hasn't started. It waits twice `recheck_every_days`, and closed ones
+//!   only fill the batch after every due open one, soonest start first, at most
+//!   a quarter of `rechecks_per_run` (rounded up). One found open again is
+//!   newly Fitting, so the Alert announces it ([`entries`]);
 //! - at most `rechecks_per_run` per Run, in one request held to `agent.max_turns`;
 //! - not at all on a Run whose Agent already failed to judge.
 
@@ -34,6 +40,15 @@ use crate::candidate::Candidate;
 use crate::profile::Profile;
 use crate::rules;
 use crate::store::{ListingKey, Store, key_of};
+
+/// A closed Hackathon waits this many times `recheck_every_days` between rechecks.
+const CLOSED_RECHECK_SLOWDOWN: u64 = 2;
+
+/// The most closed Hackathons one Run rechecks: a quarter of
+/// `rechecks_per_run`, rounded up, so at least one when rechecks are on.
+fn closed_share(rechecks_per_run: usize) -> usize {
+    rechecks_per_run.div_ceil(4)
+}
 
 /// A known Hackathon: one the Agent has judged, with its latest judgement.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,19 +89,20 @@ pub fn recheck(
     }
 
     let horizon = today + Days::new(settings.recheck_horizon_days.into());
-    let checked_before = today - Days::new(settings.recheck_every_days.into());
-    let mut due: Vec<Known> = known(store)?
+    let every = u64::from(settings.recheck_every_days);
+    let checked_before = today - Days::new(every);
+    let closed_checked_before = today - Days::new(every * CLOSED_RECHECK_SLOWDOWN);
+    let (mut closed, mut open): (Vec<Known>, Vec<Known>) = known(store)?
         .into_iter()
         .filter(|k| {
             k.judgement.fits()
                 && rules::fits_themes(&k.judgement, profile)
                 && !rules::apply(vec![k.hackathon.clone()], profile, today).is_empty()
-                && k.judgement.status_on(today) != ApplicationStatus::Closed
                 && k.hackathon.start <= horizon
-                && k.judged_on <= checked_before
         })
-        .collect();
-    due.sort_by_key(|k| {
+        .partition(|k| k.judgement.status_on(today) == ApplicationStatus::Closed);
+    open.retain(|k| k.judged_on <= checked_before);
+    open.sort_by_key(|k| {
         (
             k.judgement.deadline.is_none(),
             k.judgement.deadline,
@@ -94,11 +110,27 @@ pub fn recheck(
             k.hackathon.name.clone(),
         )
     });
-    let batch: Vec<Candidate> = due
+    // A closed Hackathon may reopen only while its deadline hasn't passed and
+    // it hasn't started.
+    closed.retain(|k| {
+        k.judgement.deadline.is_none_or(|d| d >= today)
+            && k.hackathon.start > today
+            && k.judged_on <= closed_checked_before
+    });
+    closed.sort_by_key(|k| (k.hackathon.start, k.hackathon.name.clone()));
+
+    // Open ones first; closed ones only take what's left, up to their share.
+    let closed_room = settings
+        .rechecks_per_run
+        .saturating_sub(open.len())
+        .min(closed_share(settings.rechecks_per_run));
+    let batch: Vec<Candidate> = open
         .iter()
         .take(settings.rechecks_per_run)
+        .chain(closed.iter().take(closed_room))
         .map(|k| k.hackathon.clone())
         .collect();
+    let due = open.len() + closed.len();
     if batch.is_empty() {
         return Ok(Rechecked::default());
     }
@@ -114,7 +146,7 @@ pub fn recheck(
         Err(error) => {
             return Ok(Rechecked {
                 rechecked: 0,
-                waiting: due.len(),
+                waiting: due,
                 failure: Some(error),
                 themes_normalised: 0,
             });
@@ -138,7 +170,7 @@ pub fn recheck(
 
     Ok(Rechecked {
         rechecked: judged.len(),
-        waiting: due.len() - judged.len(),
+        waiting: due - judged.len(),
         failure: None,
         themes_normalised,
     })

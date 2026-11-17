@@ -481,18 +481,22 @@ fn a_closed_hackathon_that_reopens_is_announced_then() {
     harness.run(&listing(&names), date(2026, 11, 9), LIVE_RUN);
     assert_eq!(harness.announced_names(), ["Ghent Hack"]);
 
-    // Its waitlist opens, and the store holds that as it holds any recheck.
+    // Its waitlist opens, and a recheck finds that once the closed one is due.
     let waitlist = Judgement {
         status: ApplicationStatus::Waitlist,
         ..support::hackathon()
     };
-    harness.agent.set_verdict("EDTH Paris", waitlist.clone());
-    let edth = hackathon("EDTH Paris", date(2026, 12, 2));
-    harness
-        .store
-        .save_rechecks("fake", &[(&edth, waitlist)], date(2026, 11, 10))
-        .unwrap();
-    let reopened = harness.run(&listing(&names), date(2026, 11, 10), LIVE_RUN);
+    harness.agent.set_verdict("EDTH Paris", waitlist);
+    let reopened = harness.run(&listing(&names), date(2026, 11, 15), LIVE_RUN);
+
+    assert!(
+        harness
+            .agent
+            .rechecked
+            .borrow()
+            .iter()
+            .any(|batch| batch.iter().any(|name| name == "EDTH Paris"))
+    );
 
     assert_eq!(
         reopened.alert.unwrap().text,
