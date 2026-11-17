@@ -165,7 +165,14 @@ pub fn compose_entries(mut entries: Vec<Entry>, kind: AlertKind) -> Option<Compo
     let heading = format!("hackathon-radar: {}", heading(&entries, kind));
     let lines = listed.iter().map(entry);
     let waiting = entries.len() - listed.len();
-    let more = (waiting > 0).then(|| format!("+ {waiting} more"));
+    // A Welcome Alert announces what it only counts, so no later Alert lists
+    // those; it says where to see them instead.
+    let more = (waiting > 0).then(|| match kind {
+        AlertKind::Welcome => {
+            format!("+ {waiting} more: run hackathon-radar report to see them all")
+        }
+        AlertKind::New => format!("+ {waiting} more"),
+    });
     let text = std::iter::once(heading)
         .chain(lines)
         .chain(more)
