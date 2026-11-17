@@ -119,9 +119,15 @@ pub struct Eligibility {
 pub struct AgentSettings {
     #[serde(default)]
     pub adapter: AgentAdapter,
-    /// The most Agent steps (turns) one Run may use.
+    /// The most Agent steps (turns) one judging, Duplicate-listing or recheck
+    /// request may use (ADR 0004).
     #[serde(default = "default_max_turns")]
     pub max_turns: u32,
+    /// The most judging requests one Run sends, each of at most
+    /// [`crate::judging::MAX_CANDIDATES_PER_REQUEST`] Candidates and each held
+    /// to `max_turns`.
+    #[serde(default = "default_judging_requests_per_run")]
+    pub judging_requests_per_run: usize,
     /// The command template for `adapter = "command"`; set only with that adapter.
     #[serde(default)]
     pub command: Option<CommandTemplate>,
@@ -197,6 +203,14 @@ fn default_max_turns() -> u32 {
     DEFAULT_MAX_TURNS
 }
 
+/// Enough to judge about 60 Candidates a Run, so two Runs a week keep up
+/// with the 40 or so new ones each Run finds in Europe.
+pub const DEFAULT_JUDGING_REQUESTS_PER_RUN: usize = 3;
+
+fn default_judging_requests_per_run() -> usize {
+    DEFAULT_JUDGING_REQUESTS_PER_RUN
+}
+
 /// Enough to estimate a Run's batch of destination cities, most of which need
 /// no more than a search.
 pub const DEFAULT_TRAVEL_MAX_TURNS: u32 = 15;
@@ -217,6 +231,7 @@ impl Default for AgentSettings {
         Self {
             adapter: AgentAdapter::default(),
             max_turns: DEFAULT_MAX_TURNS,
+            judging_requests_per_run: DEFAULT_JUDGING_REQUESTS_PER_RUN,
             command: None,
             experimental: false,
             travel_max_turns: DEFAULT_TRAVEL_MAX_TURNS,
@@ -399,6 +414,12 @@ impl Profile {
 
         if file.agent.max_turns == 0 {
             problems.push("agent.max_turns is 0; the Agent needs at least one step".to_owned());
+        }
+        if file.agent.judging_requests_per_run == 0 {
+            problems.push(format!(
+                "agent.judging_requests_per_run is 0, so no Candidate would ever be judged; \
+                 set it to at least 1 ({DEFAULT_JUDGING_REQUESTS_PER_RUN} by default)"
+            ));
         }
         if file.agent.adapter == AgentAdapter::Codex && !file.agent.experimental {
             problems.push(
@@ -709,6 +730,7 @@ mod tests {
                 agent: AgentSettings {
                     adapter: AgentAdapter::ClaudeCode,
                     max_turns: DEFAULT_MAX_TURNS,
+                    judging_requests_per_run: DEFAULT_JUDGING_REQUESTS_PER_RUN,
                     command: None,
                     experimental: false,
                     travel_max_turns: DEFAULT_TRAVEL_MAX_TURNS,
@@ -803,6 +825,7 @@ mod tests {
             AgentSettings {
                 adapter: AgentAdapter::ClaudeCode,
                 max_turns: 12,
+                judging_requests_per_run: DEFAULT_JUDGING_REQUESTS_PER_RUN,
                 command: None,
                 experimental: false,
                 travel_max_turns: 6,
@@ -908,6 +931,29 @@ mod tests {
         assert!(err.to_string().contains("command"), "{err}");
         let err = parse(&format!("{base}[agent]\nmax_turns = 0\n")).unwrap_err();
         assert!(err.to_string().contains("agent.max_turns is 0"), "{err}");
+    }
+
+    #[test]
+    fn judging_requests_per_run_defaults_to_3_and_cannot_be_zero() {
+        let base = "countries = [\"Belgium\"]\n[home]\ncity = \"Lyon\"\nairports = [\"LYS\"]\n";
+        assert_eq!(parse(base).unwrap().agent.judging_requests_per_run, 3);
+        let set = parse(&format!("{base}[agent]\njudging_requests_per_run = 5\n")).unwrap();
+        assert_eq!(set.agent.judging_requests_per_run, 5);
+        assert_eq!(set.agent.max_turns, DEFAULT_MAX_TURNS);
+        let err = parse(&format!("{base}[agent]\njudging_requests_per_run = 0\n")).unwrap_err();
+        assert!(
+            err.to_string().contains(
+                "agent.judging_requests_per_run is 0, so no Candidate would ever be judged; \
+                 set it to at least 1 (3 by default)"
+            ),
+            "{err}"
+        );
+        let negative =
+            parse(&format!("{base}[agent]\njudging_requests_per_run = -1\n")).unwrap_err();
+        assert!(
+            matches!(negative, ProfileError::Syntax { .. }),
+            "{negative}"
+        );
     }
 
     #[test]

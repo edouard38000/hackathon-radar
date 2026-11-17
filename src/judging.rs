@@ -6,12 +6,18 @@
 //! schema, the Candidates stay queued and go to the Agent again on the next Run;
 //! the Run itself carries on.
 //!
-//! Each Run sends one batch. A share of it is kept for Candidates outside
-//! Countries (which only Fit when Travel-funded), so a long queue in Countries
-//! can't hold them back Run after Run. Within each group the soonest go first,
-//! and a group's unused share goes to the other. Candidates whose start date is
-//! past leave the queue unjudged: by the time an Alert told the person, it
-//! would be too late to go.
+//! Each Run sends up to `agent.judging_requests_per_run` batches, one request
+//! after another, each held to the Profile's step cap (ADR 0004). It stops
+//! early once nothing is left to send, and after the first request that fails
+//! or answers in the wrong shape: what earlier requests judged is kept, and the
+//! rest wait for the next Run. A Candidate is sent at most once a Run, so one
+//! the Agent leaves out of its answer also waits for the next Run.
+//!
+//! A share of each batch is kept for Candidates outside Countries (which only
+//! Fit when Travel-funded), so a long queue in Countries can't hold them back
+//! Run after Run. Within each group the soonest go first, and a group's unused
+//! share goes to the other. Candidates whose start date is past leave the queue
+//! unjudged: by the time an Alert told the person, it would be too late to go.
 
 use std::collections::HashSet;
 
@@ -23,15 +29,16 @@ use crate::profile::Profile;
 use crate::rules;
 use crate::store::Store;
 
-/// The most Candidates sent to the Agent on one Run, so one request fits
-/// within the Profile's step cap (ADR 0004). The rest wait for the next Run.
-pub const MAX_CANDIDATES_PER_RUN: usize = 20;
+/// The most Candidates sent in one judging request, so the request fits
+/// within the Profile's step cap (ADR 0004). The rest go in the Run's next
+/// request, or wait for the next Run.
+pub const MAX_CANDIDATES_PER_REQUEST: usize = 20;
 
 /// The part of each batch kept for Candidates outside Countries while any
 /// wait: a quarter. Most of the batch stays with those in Countries, which Fit
 /// far more often; a quarter still gets through the soonest of those outside on
 /// every Run.
-pub const OUTSIDE_COUNTRIES_SHARE: usize = MAX_CANDIDATES_PER_RUN / 4;
+pub const OUTSIDE_COUNTRIES_SHARE: usize = MAX_CANDIDATES_PER_REQUEST / 4;
 
 /// A count of Candidates in the Profile's Countries and outside them.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -74,10 +81,11 @@ impl Tally {
 pub struct Judged {
     /// The Candidates the Agent judged to be Hackathons the person is eligible for.
     pub fitting: Vec<Candidate>,
-    /// How many Candidates the Agent judged on this Run, and how many still
-    /// wait for a judgement.
+    /// How many Candidates the Agent judged on this Run, over all its
+    /// requests, and how many still wait for a judgement.
     pub tally: Tally,
-    /// Why the Agent couldn't judge this Run, if it couldn't.
+    /// Why the Agent couldn't judge one of this Run's requests, if it
+    /// couldn't; the Run sent no more after it.
     pub failure: Option<String>,
     /// How many of the Agent's Theme answers were normalised rather than
     /// taken as given ([`agent::ReadAnswer`]).
@@ -117,39 +125,36 @@ pub fn judge(
         store.queue_unjudged(group, today)?;
     }
 
-    let (from_countries, from_outside) = batch_sizes(in_countries.len(), outside.len());
-    let batch: Vec<Candidate> = in_countries[..from_countries]
-        .iter()
-        .chain(&outside[..from_outside])
-        .cloned()
-        .collect();
+    // Each request takes the next batch from what this Run hasn't sent yet.
+    let mut sent = ByCountries::default();
     let mut judged = ByCountries::default();
     let mut failure = None;
     let mut themes_normalised = 0;
-    if !batch.is_empty() {
-        let ids = agent::numbered_ids(batch.len());
-        let request = JudgeRequest::new(&batch, &ids, profile);
-        let answer = agent
-            .judge(&request)
-            .map_err(|e| format!("{e:#}"))
-            .and_then(|answer| request.read_answer(&answer).map_err(|e| e.to_string()));
-        match answer {
-            Ok(read) => {
-                themes_normalised = read.themes_normalised;
-                let answered = read.judgements;
-                store.save_judgements(agent.name(), &answered, today)?;
-                store.remove_unjudged(answered.iter().map(|(c, _)| *c))?;
-                for (c, _) in &answered {
-                    if rules::in_countries(c, profile) {
-                        judged.in_countries += 1;
-                    } else {
-                        judged.outside += 1;
-                    }
-                }
+    for _ in 0..profile.agent.judging_requests_per_run {
+        let (from_countries, from_outside) = batch_sizes(
+            in_countries.len() - sent.in_countries,
+            outside.len() - sent.outside,
+        );
+        if from_countries + from_outside == 0 {
+            break;
+        }
+        let batch: Vec<Candidate> = in_countries
+            [sent.in_countries..sent.in_countries + from_countries]
+            .iter()
+            .chain(&outside[sent.outside..sent.outside + from_outside])
+            .cloned()
+            .collect();
+        sent.in_countries += from_countries;
+        sent.outside += from_outside;
+        match ask(agent, profile, store, &batch, today)? {
+            Ok(answered) => {
+                judged.in_countries += answered.judged.in_countries;
+                judged.outside += answered.judged.outside;
+                themes_normalised += answered.themes_normalised;
             }
             Err(error) => {
-                store.note_failed_judging(&batch, &error)?;
                 failure = Some(error);
+                break;
             }
         }
     }
@@ -177,13 +182,60 @@ pub fn judge(
     })
 }
 
-/// How many of the waiting Candidates in Countries and outside them go in this
-/// Run's batch: those outside get up to [`OUTSIDE_COUNTRIES_SHARE`], those in
-/// Countries the rest, and either group takes what the other doesn't use.
+/// What one judging request answered.
+struct Answered {
+    judged: ByCountries,
+    themes_normalised: usize,
+}
+
+/// Sends `batch` to the Agent in one request and stores the judgements it
+/// answers, taking them off the queue. The outer error is the store's; the
+/// inner one says why the Agent couldn't judge, after noting the failure on
+/// the batch's queued Candidates.
+fn ask(
+    agent: &dyn Agent,
+    profile: &Profile,
+    store: &mut Store,
+    batch: &[Candidate],
+    today: NaiveDate,
+) -> anyhow::Result<Result<Answered, String>> {
+    let ids = agent::numbered_ids(batch.len());
+    let request = JudgeRequest::new(batch, &ids, profile);
+    let answer = agent
+        .judge(&request)
+        .map_err(|e| format!("{e:#}"))
+        .and_then(|answer| request.read_answer(&answer).map_err(|e| e.to_string()));
+    let read = match answer {
+        Ok(read) => read,
+        Err(error) => {
+            store.note_failed_judging(batch, &error)?;
+            return Ok(Err(error));
+        }
+    };
+    let answered = read.judgements;
+    store.save_judgements(agent.name(), &answered, today)?;
+    store.remove_unjudged(answered.iter().map(|(c, _)| *c))?;
+    let mut judged = ByCountries::default();
+    for (c, _) in &answered {
+        if rules::in_countries(c, profile) {
+            judged.in_countries += 1;
+        } else {
+            judged.outside += 1;
+        }
+    }
+    Ok(Ok(Answered {
+        judged,
+        themes_normalised: read.themes_normalised,
+    }))
+}
+
+/// How many of the waiting Candidates in Countries and outside them go in the
+/// next request's batch: those outside get up to [`OUTSIDE_COUNTRIES_SHARE`],
+/// those in Countries the rest, and either group takes what the other doesn't use.
 fn batch_sizes(in_countries: usize, outside: usize) -> (usize, usize) {
-    let unused_in_countries = MAX_CANDIDATES_PER_RUN.saturating_sub(in_countries);
+    let unused_in_countries = MAX_CANDIDATES_PER_REQUEST.saturating_sub(in_countries);
     let from_outside = outside.min(OUTSIDE_COUNTRIES_SHARE.max(unused_in_countries));
-    let from_countries = in_countries.min(MAX_CANDIDATES_PER_RUN - from_outside);
+    let from_countries = in_countries.min(MAX_CANDIDATES_PER_REQUEST - from_outside);
     (from_countries, from_outside)
 }
 
