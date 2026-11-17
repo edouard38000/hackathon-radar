@@ -82,7 +82,12 @@ airports = ["BRU", "CRL"]
 # goes out reminder_days before an open Hackathon that fits you closes. On each
 # Run your Agent rechecks the deadline, status and travel funding of up to
 # rechecks_per_run known Hackathons starting within recheck_horizon_days,
-# nearest deadline first, each at most once every recheck_every_days. Rechecks
+# nearest deadline first, each at most once every recheck_every_days. A closed
+# Hackathon is rechecked too while it could still reopen (its deadline unknown
+# or not passed, and it hasn't started), but only every 2 x recheck_every_days,
+# soonest first: one slot is kept for closed ones when any is due (unless
+# rechecks_per_run is 1), plus any room the open ones leave, at most a quarter
+# of rechecks_per_run; if one reopens, the next Alert announces it. Rechecks
 # are one request held to agent.max_turns (below), and each takes at least one
 # step, so rechecks_per_run can't exceed max_turns; a page or two each fits well.
 # [deadlines]
