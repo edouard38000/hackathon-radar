@@ -5,10 +5,12 @@ mod support;
 
 use std::path::Path;
 
+use chrono::{Days, NaiveDate};
 use hackathon_radar::agent::{INSTRUCTIONS_VERSION, TravelFunded};
 use hackathon_radar::candidate::Candidate;
 use hackathon_radar::judging::MAX_CANDIDATES_PER_RUN;
 use hackathon_radar::profile::{Eligibility, Profile};
+use hackathon_radar::sources::Source;
 use support::*;
 
 const BELGIAN_HACKATHONS: [&str; 5] = [
@@ -348,4 +350,150 @@ fn a_run_sends_at_most_a_batch_and_the_rest_wait_their_turn() {
     assert_eq!(second.judged, 25 - MAX_CANDIDATES_PER_RUN);
     assert_eq!(second.unjudged, 0);
     assert_eq!(harness.stored_names().len(), 25);
+}
+
+/// A Candidate from the fake Source, held in `city`, `country` on one day.
+fn held(name: &str, city: &str, country: &str, start: NaiveDate) -> Candidate {
+    Candidate {
+        source: "fake".into(),
+        source_key: name.into(),
+        name: name.into(),
+        start,
+        end: start,
+        city: Some(city.into()),
+        location: None,
+        country: Some(country.into()),
+        link: None,
+    }
+}
+
+/// `count` Hackathons in Ghent, one a day from 1 Dec, and `abroad` in Boston,
+/// one a day from 1 Mar: every Ghent one is sooner than every Boston one.
+fn ghent_and_boston(count: u64, abroad: u64) -> Vec<Candidate> {
+    let ghent = (0..count).map(|i| {
+        held(
+            &format!("Ghent Hack {:02}", i + 1),
+            "Ghent",
+            "Belgium",
+            date(2026, 12, 1) + Days::new(i),
+        )
+    });
+    let boston = (0..abroad).map(|i| {
+        held(
+            &format!("Boston Hack {:02}", i + 1),
+            "Boston",
+            "United States",
+            date(2027, 3, 1) + Days::new(i),
+        )
+    });
+    ghent.chain(boston).collect()
+}
+
+fn listing(candidates: &[Candidate]) -> Vec<Box<dyn Source>> {
+    vec![Box::new(FakeSource {
+        name: "fake".into(),
+        result: Ok(candidates.to_vec()),
+    })]
+}
+
+fn numbered(prefix: &str, from: usize, to: usize) -> Vec<String> {
+    (from..=to).map(|i| format!("{prefix} {i:02}")).collect()
+}
+
+fn travel_funded_anywhere() -> Profile {
+    travel_profile(&["Belgium"], "[travel]\ntravel_funded_anywhere = true\n")
+}
+
+#[test]
+fn candidates_outside_countries_are_judged_every_run_while_more_in_countries_wait() {
+    let mut harness = Harness::new(travel_funded_anywhere());
+    let listed = ghent_and_boston(40, 12);
+
+    // Forty wait in Countries, more than two batches hold, yet each Run also
+    // judges the soonest of those outside Countries.
+    for day in [17, 18, 19] {
+        harness.run(&listing(&listed), date(2026, 11, day), DRY_RUN);
+    }
+
+    let expected = [
+        [numbered("Ghent Hack", 1, 15), numbered("Boston Hack", 1, 5)].concat(),
+        [numbered("Ghent Hack", 16, 30), numbered("Boston Hack", 6, 10)].concat(),
+        // Ten left in Countries: the share they don't use goes to those outside.
+        [numbered("Ghent Hack", 31, 40), numbered("Boston Hack", 11, 12)].concat(),
+    ];
+    assert_eq!(*harness.agent.asked.borrow(), expected);
+    assert!(harness.unjudged_names().is_empty());
+}
+
+#[test]
+fn a_share_one_group_does_not_use_goes_to_the_other() {
+    // Few outside Countries: those in Countries take the rest of the batch.
+    let mut harness = Harness::new(travel_funded_anywhere());
+    let outcome = harness.run(
+        &listing(&ghent_and_boston(30, 2)),
+        date(2026, 11, 17),
+        DRY_RUN,
+    );
+    assert_eq!(
+        *harness.agent.asked.borrow(),
+        [[numbered("Ghent Hack", 1, 18), numbered("Boston Hack", 1, 2)].concat()]
+    );
+    assert_eq!((outcome.judged, outcome.unjudged), (20, 12));
+
+    // Few in Countries: those outside take the rest of the batch.
+    let mut harness = Harness::new(travel_funded_anywhere());
+    let outcome = harness.run(
+        &listing(&ghent_and_boston(3, 30)),
+        date(2026, 11, 17),
+        DRY_RUN,
+    );
+    assert_eq!(
+        *harness.agent.asked.borrow(),
+        [[numbered("Ghent Hack", 1, 3), numbered("Boston Hack", 1, 17)].concat()]
+    );
+    assert_eq!((outcome.judged, outcome.unjudged), (20, 13));
+}
+
+#[test]
+fn started_candidates_leave_the_queue_without_being_sent_to_the_agent() {
+    let mut harness = Harness::new(profile(&["Belgium"]));
+    let ongoing = Candidate {
+        end: date(2026, 11, 20),
+        ..held("Ongoing Hack", "Ghent", "Belgium", date(2026, 11, 15))
+    };
+    let starts_today = Candidate {
+        end: date(2026, 11, 18),
+        ..held("Starts Today Hack", "Ghent", "Belgium", date(2026, 11, 17))
+    };
+    // Devpost gives a submission period, which opens before the event, so its
+    // start isn't the day the Hackathon starts: it is still judged.
+    let submissions_open = Candidate {
+        source: "devpost".into(),
+        end: date(2026, 12, 15),
+        ..held("Devpost Hack", "Ghent", "Belgium", date(2026, 11, 1))
+    };
+    let next_week = held("Next Week Hack", "Ghent", "Belgium", date(2026, 11, 24));
+    harness.agent = FakeAgent::failing("timed out");
+    harness.run(
+        &listing(&[ongoing, starts_today, submissions_open, next_week]),
+        date(2026, 11, 10),
+        DRY_RUN,
+    );
+    assert_eq!(harness.unjudged_names().len(), 4);
+
+    // A week later two of the queued have started, and the Source lists only
+    // a new one that started yesterday.
+    harness.agent = FakeAgent::approving();
+    let fresh = Candidate {
+        end: date(2026, 11, 19),
+        ..held("Fresh Ongoing Hack", "Ghent", "Belgium", date(2026, 11, 16))
+    };
+    let next = harness.run(&listing(&[fresh]), date(2026, 11, 17), DRY_RUN);
+
+    assert_eq!(
+        *harness.agent.asked.borrow(),
+        [names(&["Devpost Hack", "Next Week Hack"])]
+    );
+    assert_eq!((next.judged, next.unjudged), (2, 0));
+    assert!(harness.unjudged_names().is_empty());
 }
