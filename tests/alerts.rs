@@ -121,13 +121,53 @@ Ghent, 6 Dec 2026
 Status unknown · deadline unknown
 https://example.org/H6
 
-+ 2 more"]
++ 2 more: run hackathon-radar report to see them all"]
     );
     assert_eq!(harness.announced_names(), names);
 
     // H7 and H8 were counted in the Welcome Alert, so they don't come back.
     let later = harness.run(&listing(&names), date(2026, 11, 12), LIVE_RUN);
     assert_eq!(later.alert, None);
+}
+
+#[test]
+fn a_welcome_alert_that_lists_everything_has_no_pointer_to_the_report() {
+    let mut harness = Harness::new(profile(&["Belgium"]));
+    let names = ["H1", "H2", "H3", "H4", "H5", "H6"];
+
+    harness.run(&listing(&names), date(2026, 11, 9), LIVE_RUN);
+
+    let [welcome] = texts(&harness)[..] else {
+        panic!("expected exactly one Alert, got {:?}", texts(&harness));
+    };
+    assert!(welcome.ends_with("\nhttps://example.org/H6"), "{welcome}");
+    assert!(!welcome.contains("more"), "{welcome}");
+    assert!(!welcome.contains("report"), "{welcome}");
+    assert_eq!(harness.announced_names(), names);
+}
+
+#[test]
+fn later_alerts_count_the_rest_without_a_pointer_and_keep_them_due() {
+    let mut harness = Harness::new(profile(&["Belgium"]));
+    harness.run(&listing(&["Welcome Hack"]), date(2026, 11, 9), LIVE_RUN);
+
+    let names = ["Welcome Hack", "N1", "N2", "N3", "N4", "N5", "N6", "N7"];
+    harness.run(&listing(&names), date(2026, 11, 12), LIVE_RUN);
+    let later = harness.channel.sent[1].text.clone();
+    assert!(later.ends_with("\n\n+ 1 more"), "{later}");
+    assert!(!later.contains("report"), "{later}");
+    // N7 was only counted, so it isn't Announced and comes in the next Alert.
+    assert_eq!(harness.announced_names(), &names[..7]);
+
+    harness.run(&listing(&names), date(2026, 11, 16), LIVE_RUN);
+    assert!(
+        harness.channel.sent[2]
+            .text
+            .starts_with("hackathon-radar: 1 Hackathon newly fits you\n\nN7\n"),
+        "{}",
+        harness.channel.sent[2].text
+    );
+    assert_eq!(harness.announced_names(), names);
 }
 
 #[test]

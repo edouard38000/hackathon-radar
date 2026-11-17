@@ -165,7 +165,14 @@ pub fn compose_entries(mut entries: Vec<Entry>, kind: AlertKind) -> Option<Compo
     let heading = format!("hackathon-radar: {}", heading(&entries, kind));
     let lines = listed.iter().map(entry);
     let waiting = entries.len() - listed.len();
-    let more = (waiting > 0).then(|| format!("+ {waiting} more"));
+    // A Welcome Alert announces what it only counts, so no later Alert lists
+    // those; it says where to see them instead.
+    let more = (waiting > 0).then(|| match kind {
+        AlertKind::Welcome => {
+            format!("+ {waiting} more: run hackathon-radar report to see them all")
+        }
+        AlertKind::New => format!("+ {waiting} more"),
+    });
     let text = std::iter::once(heading)
         .chain(lines)
         .chain(more)
@@ -347,6 +354,52 @@ mod tests {
     fn nothing_to_compose_means_no_alert() {
         assert_eq!(compose(&[], AlertKind::Welcome), None);
         assert_eq!(compose(&[], AlertKind::New), None);
+    }
+
+    /// `n` Hackathons that newly Fit, the ith starting on 1 Dec 2026 + i days.
+    fn fits(n: u32) -> Vec<Candidate> {
+        (0..n)
+            .map(|i| Candidate {
+                source: "test".into(),
+                source_key: format!("{i}"),
+                name: format!("H{i}"),
+                start: date(2026, 12, 1 + i),
+                end: date(2026, 12, 1 + i),
+                city: None,
+                location: None,
+                country: Some("Belgium".into()),
+                link: None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_welcome_alert_with_more_than_it_lists_points_to_the_report() {
+        let text = compose(&fits(8), AlertKind::Welcome).unwrap().alert.text;
+        assert!(
+            text.ends_with("\n\n+ 2 more: run hackathon-radar report to see them all"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_welcome_alert_that_lists_everything_has_no_pointer() {
+        let text = compose(&fits(6), AlertKind::Welcome).unwrap().alert.text;
+        assert!(!text.contains("more"), "{text}");
+        assert!(!text.contains("report"), "{text}");
+    }
+
+    #[test]
+    fn a_later_alert_counts_the_rest_without_the_pointer() {
+        let composed = compose(&fits(8), AlertKind::New).unwrap();
+        assert!(
+            composed.alert.text.ends_with("\n\n+ 2 more"),
+            "{}",
+            composed.alert.text
+        );
+        assert!(!composed.alert.text.contains("report"));
+        let announced: Vec<&str> = composed.announces.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(announced, ["H0", "H1", "H2", "H3", "H4", "H5"]);
     }
 
     #[test]
