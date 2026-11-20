@@ -11,6 +11,7 @@ cargo build
 cargo fmt --check
 cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
+mdsh --frozen   # the README's generated blocks (cargo install mdsh --locked); not in CI, where tests/readme.rs checks them
 (cd sidecar/photon && npm ci && npm test)   # only for changes to the Photon sidecar
 ```
 
