@@ -187,11 +187,26 @@ fn no_workflow_uses_a_self_hosted_runner() {
             continue;
         }
         let text = std::fs::read_to_string(&path).unwrap();
+        let file = path.display();
         assert!(
             !text.to_ascii_lowercase().contains("self-hosted"),
-            "{} mentions a self-hosted runner; this public repo runs on GitHub-hosted runners only",
-            path.display()
+            "{file} mentions a self-hosted runner; this public repo runs on GitHub-hosted runners only"
         );
+        // A self-hosted runner can also be picked without the label, by its
+        // other labels or a runner group, so every job's runner must be a
+        // single GitHub-hosted image name.
+        let workflow: Value = serde_norway::from_str(&text).unwrap();
+        for (name, job) in workflow["jobs"].as_mapping().unwrap() {
+            let name = name.as_str().unwrap();
+            for runner in hosted_runner_labels(job) {
+                assert!(
+                    ["ubuntu-", "macos-", "windows-"]
+                        .iter()
+                        .any(|prefix| runner.starts_with(prefix)),
+                    "{file}: job {name} runs on {runner:?}, not a GitHub-hosted runner"
+                );
+            }
+        }
         checked += 1;
     }
     assert!(
@@ -199,4 +214,40 @@ fn no_workflow_uses_a_self_hosted_runner() {
         "expected ci.yml and release.yml in {}",
         dir.display()
     );
+}
+
+/// The runner names a job can run on, resolving `${{ matrix.<key> }}` from
+/// the job's matrix. Panics on any form other than a single name (a label
+/// list or a runner group), which could select a self-hosted runner.
+fn hosted_runner_labels(job: &Value) -> Vec<String> {
+    let runs_on = job["runs-on"]
+        .as_str()
+        .unwrap_or_else(|| panic!("runs-on must be one runner name, got {:?}", job["runs-on"]));
+    let Some(key) = runs_on
+        .strip_prefix("${{ matrix.")
+        .and_then(|rest| rest.strip_suffix(" }}"))
+    else {
+        assert!(!runs_on.contains("${{"), "unresolvable runs-on {runs_on}");
+        return vec![runs_on.to_owned()];
+    };
+    let matrix = &job["strategy"]["matrix"];
+    let mut values: Vec<&Value> = matrix[key].as_sequence().into_iter().flatten().collect();
+    values.extend(
+        matrix["include"]
+            .as_sequence()
+            .into_iter()
+            .flatten()
+            .map(|entry| &entry[key])
+            .filter(|value| !value.is_null()),
+    );
+    assert!(!values.is_empty(), "matrix.{key} has no values");
+    values
+        .into_iter()
+        .map(|value| {
+            value
+                .as_str()
+                .unwrap_or_else(|| panic!("matrix.{key} must be one runner name, got {value:?}"))
+                .to_owned()
+        })
+        .collect()
 }
