@@ -7,9 +7,10 @@
 # VHS 0.12.1 or later (brew install vhs brings ttyd and ffmpeg).
 #
 # Nothing here touches the network, a real Agent, your keychain or your own
-# Profile: it works in a fresh temporary directory, with a Profile that `init`
-# writes there and the made-up Hackathons in demo/hackathons.csv. Their dates
-# are in 2027; move them on before rendering once they've passed.
+# Profile: HOME and the XDG directories point at a fresh temporary directory,
+# so `init` writes its Profile and database there, and the Hackathons are the
+# made-up ones in demo/hackathons.csv. Their dates are in 2027; move them on
+# before rendering once they've passed.
 
 Output demo/demo.gif
 Output demo/demo.mp4
@@ -17,9 +18,9 @@ Output demo/demo.mp4
 Require bash
 
 Set Shell "bash"
-Set FontSize 16
-Set Width 1200
-Set Height 760
+Set FontSize 14
+Set Width 1500
+Set Height 1120
 Set Padding 24
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 25ms
@@ -39,19 +40,20 @@ Sleep 4s
 
 Type "clear" Enter
 Type "# Set up a Profile: Home in Brussels, Europe and the US West Coast." Enter
-Type `hackathon-radar init --yes --profile profile.toml --db radar.sqlite --home-city Brussels --countries "Schengen, US West Coast" --themes "AI agents, climate" --alert-channel none --test-alert false` Sleep 300ms Enter
+Type `hackathon-radar init --yes --home-city Brussels --countries "Schengen, US West Coast" --themes "AI agents, climate" --alert-channel none` Sleep 300ms Enter
 Sleep 3s
-Type "cat profile.toml" Sleep 300ms Enter
+Type "cat ~/.config/hackathon-radar/profile.toml" Sleep 300ms Enter
 Sleep 4s
 
 Type "clear" Enter
 Type "# Bring in hackathons you already track, then see what fits." Enter
-Type "hackathon-radar import-sheet hackathons.csv --profile profile.toml --db radar.sqlite" Sleep 300ms Enter
-Sleep 2s
-Type "hackathon-radar report --profile profile.toml --db radar.sqlite" Sleep 300ms Enter
-Sleep 6s
+Type "hackathon-radar import-sheet hackathons.csv" Sleep 300ms Enter
+Sleep 3s
+Type "clear" Enter
+Type "hackathon-radar report" Sleep 300ms Enter
+Sleep 8s
 
 Type "clear" Enter
 Type "# Deadlines into your calendar." Enter
-Type "hackathon-radar export ics --profile profile.toml --db radar.sqlite --out deadlines.ics" Sleep 300ms Enter
+Type "hackathon-radar export ics --out deadlines.ics" Sleep 300ms Enter
 Sleep 3s
