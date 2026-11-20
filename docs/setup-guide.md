@@ -149,8 +149,6 @@ These respect `XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `XDG_STATE_HOME`; remove an
 
    It repeats the manual release check against the real world in about ten minutes: `init` with a test Alert over ntfy, `doctor --json`, two dry runs around a real Run whose Welcome Alert must reach ntfy.sh, and `schedule install` and `uninstall`. It uses a temporary Profile, database and directories, and leaves nothing behind but a few ntfy messages on a random topic. It refuses to start while a hackathon-radar schedule is installed, so run `schedule uninstall` first on a machine that has one, and `schedule install` again afterwards. See the README's [Development](https://github.com/edouard38000/hackathon-radar#the-live-end-to-end-test) section for what it checks and leaves behind.
 3. Optionally run the Release workflow with `workflow_dispatch` from that commit. It builds and uploads Actions artifacts for all four targets, without creating or uploading a GitHub Release.
-
-   The two macOS targets build on the maintainer's own Mac, a self-hosted runner, not on GitHub's macOS runners. They need that Mac's runner to be online and queue until it is, for up to 24 hours; after that they fail, and you re-run the failed jobs once the Mac is online. The Release is only published once all four builds succeed.
 4. Tag and push the version (for example, after bumping to 0.1.0):
 
    ```sh

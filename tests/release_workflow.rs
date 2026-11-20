@@ -1,6 +1,7 @@
 //! Parse the release workflow without installing actionlint. This checks the
-//! distribution contract; building each target still needs its runner (GitHub
-//! hosted for Linux, the maintainer's self-hosted Mac for macOS).
+//! distribution contract; building each target still needs its hosted runner.
+//! Also guards every workflow against self-hosted runners: the repo is public,
+//! and a fork's pull request could run its own code on a self-hosted machine.
 
 use serde_norway::Value;
 
@@ -15,45 +16,33 @@ fn release_workflow_parses_and_keeps_publication_scoped_to_tags() {
             .unwrap()
             .contains_key("workflow_dispatch")
     );
-    // The macOS builds run on a self-hosted Mac: a pull request, from a fork
-    // or not, must never be able to start this workflow.
-    assert!(
-        !workflow["on"]
-            .as_mapping()
-            .unwrap()
-            .contains_key("pull_request")
-    );
-    assert!(
-        !workflow["on"]
-            .as_mapping()
-            .unwrap()
-            .contains_key("pull_request_target")
-    );
+    // A pull request, from a fork or not, must never start a release build.
+    for trigger in ["pull_request", "pull_request_target"] {
+        assert!(
+            !workflow["on"].as_mapping().unwrap().contains_key(trigger),
+            "release workflow must not run on {trigger}"
+        );
+    }
     assert_eq!(workflow["permissions"]["contents"].as_str(), Some("read"));
 
     let jobs = workflow["jobs"].as_mapping().unwrap();
-    // A runner is either one hosted label or a list of self-hosted labels;
-    // compare both as label lists.
-    let targets: Vec<(&str, Vec<&str>)> =
-        workflow["jobs"]["build"]["strategy"]["matrix"]["include"]
-            .as_sequence()
-            .unwrap()
-            .iter()
-            .map(|entry| {
-                let labels = match entry["os"].as_sequence() {
-                    Some(labels) => labels.iter().map(|l| l.as_str().unwrap()).collect(),
-                    None => vec![entry["os"].as_str().unwrap()],
-                };
-                (entry["target"].as_str().unwrap(), labels)
-            })
-            .collect();
+    let targets: Vec<(&str, &str)> = workflow["jobs"]["build"]["strategy"]["matrix"]["include"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                entry["target"].as_str().unwrap(),
+                entry["os"].as_str().unwrap(),
+            )
+        })
+        .collect();
     assert_eq!(targets.len(), 4);
-    let self_hosted_mac = vec!["self-hosted", "macOS", "ARM64"];
     for target in [
-        ("aarch64-apple-darwin", self_hosted_mac.clone()),
-        ("x86_64-apple-darwin", self_hosted_mac.clone()),
-        ("x86_64-unknown-linux-gnu", vec!["ubuntu-22.04"]),
-        ("aarch64-unknown-linux-gnu", vec!["ubuntu-22.04-arm"]),
+        ("aarch64-apple-darwin", "macos-latest"),
+        ("x86_64-apple-darwin", "macos-latest"),
+        ("x86_64-unknown-linux-gnu", "ubuntu-22.04"),
+        ("aarch64-unknown-linux-gnu", "ubuntu-22.04-arm"),
     ] {
         assert!(
             targets.contains(&target),
@@ -182,4 +171,83 @@ fn release_archive_extracts_into_one_versioned_directory() {
         std::fs::read(root.join(binary)).unwrap()
     );
     assert!(!payload.join("sidecar/photon/node_modules").exists());
+}
+
+#[test]
+fn no_workflow_uses_a_self_hosted_runner() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        let is_yaml = matches!(
+            path.extension().and_then(|e| e.to_str()),
+            Some("yml" | "yaml")
+        );
+        if !is_yaml {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        let file = path.display();
+        assert!(
+            !text.to_ascii_lowercase().contains("self-hosted"),
+            "{file} mentions a self-hosted runner; this public repo runs on GitHub-hosted runners only"
+        );
+        // A self-hosted runner can also be picked without the label, by its
+        // other labels or a runner group, so every job's runner must be a
+        // single GitHub-hosted image name.
+        let workflow: Value = serde_norway::from_str(&text).unwrap();
+        for (name, job) in workflow["jobs"].as_mapping().unwrap() {
+            let name = name.as_str().unwrap();
+            for runner in hosted_runner_labels(job) {
+                assert!(
+                    ["ubuntu-", "macos-", "windows-"]
+                        .iter()
+                        .any(|prefix| runner.starts_with(prefix)),
+                    "{file}: job {name} runs on {runner:?}, not a GitHub-hosted runner"
+                );
+            }
+        }
+        checked += 1;
+    }
+    assert!(
+        checked >= 2,
+        "expected ci.yml and release.yml in {}",
+        dir.display()
+    );
+}
+
+/// The runner names a job can run on, resolving `${{ matrix.<key> }}` from
+/// the job's matrix. Panics on any form other than a single name (a label
+/// list or a runner group), which could select a self-hosted runner.
+fn hosted_runner_labels(job: &Value) -> Vec<String> {
+    let runs_on = job["runs-on"]
+        .as_str()
+        .unwrap_or_else(|| panic!("runs-on must be one runner name, got {:?}", job["runs-on"]));
+    let Some(key) = runs_on
+        .strip_prefix("${{ matrix.")
+        .and_then(|rest| rest.strip_suffix(" }}"))
+    else {
+        assert!(!runs_on.contains("${{"), "unresolvable runs-on {runs_on}");
+        return vec![runs_on.to_owned()];
+    };
+    let matrix = &job["strategy"]["matrix"];
+    let mut values: Vec<&Value> = matrix[key].as_sequence().into_iter().flatten().collect();
+    values.extend(
+        matrix["include"]
+            .as_sequence()
+            .into_iter()
+            .flatten()
+            .map(|entry| &entry[key])
+            .filter(|value| !value.is_null()),
+    );
+    assert!(!values.is_empty(), "matrix.{key} has no values");
+    values
+        .into_iter()
+        .map(|value| {
+            value
+                .as_str()
+                .unwrap_or_else(|| panic!("matrix.{key} must be one runner name, got {value:?}"))
+                .to_owned()
+        })
+        .collect()
 }
