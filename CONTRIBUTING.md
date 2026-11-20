@@ -14,7 +14,7 @@ cargo test --locked
 (cd sidecar/photon && npm ci && npm test)   # only for changes to the Photon sidecar
 ```
 
-CI runs exactly these on macOS and Linux, and a PR must pass them. Tests never touch the network, a real Agent, Photon or your keychain: Sources read saved fixtures from `tests/fixtures/`, and secrets go to a fake keychain. Keep it that way; a test that needs the network belongs in the live test.
+CI runs exactly these on Linux for every PR, and a PR must pass them. The macOS run happens only after a merge to `main`, on the maintainer's own Mac as a self-hosted runner; it needs that Mac's runner to be online, and queues for up to 24 hours (then fails and must be re-run) until it is. Tests never touch the network, a real Agent, Photon or your keychain: Sources read saved fixtures from `tests/fixtures/`, and secrets go to a fake keychain. Keep it that way; a test that needs the network belongs in the live test.
 
 The live end-to-end test (`tests/live.rs`) is the one exception. It runs the real binary against real Sources, a real `claude` and ntfy.sh, so it is ignored by default and the maintainer runs it before a release. See the README's [Development](README.md#development) section.
 

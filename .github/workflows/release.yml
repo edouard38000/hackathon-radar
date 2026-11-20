@@ -33,19 +33,33 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+  # The two macOS builds run on Edouard's own Mac (a self-hosted runner), not
+  # on GitHub's macOS runners, whose minutes cost money and used up the
+  # account's included Actions usage. This workflow runs only on a pushed v*
+  # tag or a manual workflow_dispatch, never on pull_request (the test in
+  # tests/release_workflow.rs checks that). This is not a security boundary on
+  # its own, since a PR could add a workflow of its own: keep approval for
+  # outside contributors' workflow runs on. While the Mac's runner is offline
+  # the macOS builds queue for up to 24 hours, then fail, and the Release is
+  # not published; re-run the failed jobs once the Mac is online.
+  #
+  # The Mac is a persistent machine, so the steps leave no global state behind:
+  # rustup installs the toolchain and targets but never changes the default
+  # toolchain, and cargo always runs through `rustup run stable`.
   build:
     name: Build ${{ matrix.target }}
     needs: version
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: aarch64-apple-darwin
-            os: macos-latest
-          # Cross-compile with Apple's native toolchain on the arm64 runner;
-          # macos-13 is retired. No Docker or cross is needed.
+            os: [self-hosted, macOS, ARM64]
+          # Cross-compile with Apple's native toolchain on the arm64 Mac.
+          # No Docker or cross is needed.
           - target: x86_64-apple-darwin
-            os: macos-latest
+            os: [self-hosted, macOS, ARM64]
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
           - target: aarch64-unknown-linux-gnu
@@ -58,14 +72,20 @@ jobs:
       - name: Install Rust target
         env:
           TARGET: ${{ matrix.target }}
+        shell: bash
         run: |
+          set -euo pipefail
+          if [[ -d "$HOME/.cargo/bin" ]]; then echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"; export PATH="$HOME/.cargo/bin:$PATH"; fi
+          if ! command -v rustup > /dev/null; then
+            echo "::error::rustup is not installed on this runner. Install it once by hand (https://rustup.rs) so rustup is on PATH or in ~/.cargo/bin; the workflow does not install it."
+            exit 1
+          fi
           rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
-          rustup target add "$TARGET"
+          rustup target add --toolchain stable "$TARGET"
       - name: Build
         env:
           TARGET: ${{ matrix.target }}
-        run: cargo build --release --locked --target "$TARGET"
+        run: rustup run stable cargo build --release --locked --target "$TARGET"
       - name: Package binary and Photon sidecar
         env:
           VERSION: ${{ needs.version.outputs.version }}

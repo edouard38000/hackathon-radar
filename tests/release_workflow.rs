@@ -1,5 +1,6 @@
 //! Parse the release workflow without installing actionlint. This checks the
-//! distribution contract; building each target still needs its hosted runner.
+//! distribution contract; building each target still needs its runner (GitHub
+//! hosted for Linux, the maintainer's self-hosted Mac for macOS).
 
 use serde_norway::Value;
 
@@ -14,26 +15,45 @@ fn release_workflow_parses_and_keeps_publication_scoped_to_tags() {
             .unwrap()
             .contains_key("workflow_dispatch")
     );
+    // The macOS builds run on a self-hosted Mac: a pull request, from a fork
+    // or not, must never be able to start this workflow.
+    assert!(
+        !workflow["on"]
+            .as_mapping()
+            .unwrap()
+            .contains_key("pull_request")
+    );
+    assert!(
+        !workflow["on"]
+            .as_mapping()
+            .unwrap()
+            .contains_key("pull_request_target")
+    );
     assert_eq!(workflow["permissions"]["contents"].as_str(), Some("read"));
 
     let jobs = workflow["jobs"].as_mapping().unwrap();
-    let targets: Vec<(&str, &str)> = workflow["jobs"]["build"]["strategy"]["matrix"]["include"]
-        .as_sequence()
-        .unwrap()
-        .iter()
-        .map(|entry| {
-            (
-                entry["target"].as_str().unwrap(),
-                entry["os"].as_str().unwrap(),
-            )
-        })
-        .collect();
+    // A runner is either one hosted label or a list of self-hosted labels;
+    // compare both as label lists.
+    let targets: Vec<(&str, Vec<&str>)> =
+        workflow["jobs"]["build"]["strategy"]["matrix"]["include"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .map(|entry| {
+                let labels = match entry["os"].as_sequence() {
+                    Some(labels) => labels.iter().map(|l| l.as_str().unwrap()).collect(),
+                    None => vec![entry["os"].as_str().unwrap()],
+                };
+                (entry["target"].as_str().unwrap(), labels)
+            })
+            .collect();
     assert_eq!(targets.len(), 4);
+    let self_hosted_mac = vec!["self-hosted", "macOS", "ARM64"];
     for target in [
-        ("aarch64-apple-darwin", "macos-latest"),
-        ("x86_64-apple-darwin", "macos-latest"),
-        ("x86_64-unknown-linux-gnu", "ubuntu-22.04"),
-        ("aarch64-unknown-linux-gnu", "ubuntu-22.04-arm"),
+        ("aarch64-apple-darwin", self_hosted_mac.clone()),
+        ("x86_64-apple-darwin", self_hosted_mac.clone()),
+        ("x86_64-unknown-linux-gnu", vec!["ubuntu-22.04"]),
+        ("aarch64-unknown-linux-gnu", vec!["ubuntu-22.04-arm"]),
     ] {
         assert!(
             targets.contains(&target),
