@@ -13,12 +13,8 @@ env:
 
 jobs:
   check:
-    name: fmt, clippy, test (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    name: fmt, clippy, test (ubuntu-latest)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -28,6 +24,39 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
+
+  # macOS runs on Edouard's own Mac (a self-hosted runner), not on GitHub's
+  # macOS runners, whose minutes cost money and used up the account's included
+  # Actions usage. It runs only on push to main, never on pull_request: a PR
+  # never waits on the Mac, and code from an outside PR can never run on it.
+  # The job queues until the Mac's runner is online.
+  #
+  # The Mac is a persistent machine, so this job leaves no global state behind:
+  # no dtolnay/rust-toolchain (it would install rustup if missing and run
+  # `rustup default`), no rust-cache (it prunes ~/.cargo/registry when saving),
+  # and cargo always runs through `rustup run stable`.
+  check-macos:
+    name: fmt, clippy, test (self-hosted macOS)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install the stable toolchain with rustup
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d "$HOME/.cargo/bin" ]]; then echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"; export PATH="$HOME/.cargo/bin:$PATH"; fi
+          if ! command -v rustup > /dev/null; then
+            echo "::error::rustup is not installed on this self-hosted runner. Install it once by hand (https://rustup.rs); CI does not install it."
+            exit 1
+          fi
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy --no-self-update
+      - run: rustup run stable cargo fmt --check
+      - run: rustup run stable cargo clippy --all-targets --locked -- -D warnings
+      - run: rustup run stable cargo test --locked
 
   # The Photon sidecar, the one part that isn't Rust (ADR 0005). Its tests use
   # a fake Photon SDK and never touch the network.
