@@ -36,9 +36,12 @@ jobs:
   # The two macOS builds run on Edouard's own Mac (a self-hosted runner), not
   # on GitHub's macOS runners, whose minutes cost money and used up the
   # account's included Actions usage. This workflow runs only on a pushed v*
-  # tag or a manual workflow_dispatch, never on pull_request, so code from an
-  # outside PR can never run on the Mac. The macOS builds queue until the
-  # Mac's runner is online.
+  # tag or a manual workflow_dispatch, never on pull_request (the test in
+  # tests/release_workflow.rs checks that). This is not a security boundary on
+  # its own, since a PR could add a workflow of its own: keep approval for
+  # outside contributors' workflow runs on. While the Mac's runner is offline
+  # the macOS builds queue for up to 24 hours, then fail, and the Release is
+  # not published; re-run the failed jobs once the Mac is online.
   #
   # The Mac is a persistent machine, so the steps leave no global state behind:
   # rustup installs the toolchain and targets but never changes the default
@@ -74,7 +77,7 @@ jobs:
           set -euo pipefail
           if [[ -d "$HOME/.cargo/bin" ]]; then echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"; export PATH="$HOME/.cargo/bin:$PATH"; fi
           if ! command -v rustup > /dev/null; then
-            echo "::error::rustup is not installed on this runner. Install it once by hand (https://rustup.rs); the workflow does not install it."
+            echo "::error::rustup is not installed on this runner. Install it once by hand (https://rustup.rs) so rustup is on PATH or in ~/.cargo/bin; the workflow does not install it."
             exit 1
           fi
           rustup toolchain install stable --profile minimal --no-self-update
