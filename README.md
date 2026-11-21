@@ -126,13 +126,11 @@ hackathon-radar runs on your own macOS or Linux machine. The quickest way in is 
 
 ### Prerequisites
 
-* **The binary:** a [release archive](https://github.com/edouard38000/hackathon-radar/releases) (no Rust needed), or Rust 1.88 or later to build it with cargo.
+* **The binary:** a [release archive](https://github.com/edouard38000/hackathon-radar/releases) (no Rust needed) once the first release is out, or Rust 1.88 or later to build it with cargo.
 * **An Agent:** [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with `claude` on your `PATH` and signed in (run `claude` once yourself). Codex works too, behind an experimental opt-in, or any other coding agent through a command template; see [The Agent](#the-agent).
 * **For Photon (iMessage) Alerts only:** [Node.js](https://nodejs.org) 20.18.1 or later. ntfy needs no Node.
 
 ### Installation
-
-**Quick start:** open this repo in Claude Code and say **"set me up"**.
 
 1. Clone the repo
    ```sh

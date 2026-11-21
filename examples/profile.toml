@@ -67,7 +67,7 @@ airports = ["BRU", "CRL"]
 # kind = "ntfy"
 # topic = "hackathon-radar-example-7f3k9q"
 #
-# For iMessage Alerts from your own Photon line instead (see the README), use
+# For iMessage Alerts from your own Photon line instead (see "Photon (iMessage) Alerts" in docs/setup-guide.md), use
 #   kind = "photon"
 #   to = "+32470123456"    (your phone number, in E.164 format)
 # and let `hackathon-radar init` store your Photon project ID and secret in your keychain.
