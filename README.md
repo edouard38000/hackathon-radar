@@ -1,29 +1,177 @@
-# hackathon-radar
+<!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
+<a id="readme-top"></a>
+
+<!-- PROJECT SHIELDS -->
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![License: MIT OR Apache-2.0][license-shield]][license-url]
+[![CI][ci-shield]][ci-url]
+
+
+
+<!-- PROJECT LOGO -->
+<br />
+<div align="center">
+  <h3 align="center">hackathon-radar</h3>
+
+  <p align="center">
+    A self-hosted hackathon tracker. An AI agent running on your own machine finds hackathons that fit where you live and what you care about, tracks application deadlines, and texts you when something new or travel-funded appears.
+    <br />
+    <a href="docs/setup-guide.md"><strong>Explore the docs »</strong></a>
+    <br />
+    <br />
+    <a href="#about-the-project">View Demo</a>
+    &middot;
+    <a href="https://github.com/edouard38000/hackathon-radar/issues/new?template=bug_report.yml">Report Bug</a>
+    &middot;
+    <a href="https://github.com/edouard38000/hackathon-radar/issues/new?template=feature_request.yml">Request Feature</a>
+  </p>
+</div>
+
+> [!IMPORTANT]
+> **Personal use only.** hackathon-radar reads public hackathon listings whose terms vary by Source. Respect those terms and do not redistribute collected data ([ADR 0001](docs/adr/0001-self-hosted-only.md)).
+
+> [!TIP]
+> **Quick start:** open this repo in Claude Code and say **"set me up"**. See [Installation](#installation).
+
+
+
+<!-- TABLE OF CONTENTS -->
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li>
+      <a href="#about-the-project">About The Project</a>
+      <ul>
+        <li><a href="#principles">Principles</a></li>
+        <li><a href="#built-with">Built With</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#getting-started">Getting Started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#installation">Installation</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#usage">Usage</a>
+      <ul>
+        <li><a href="#commands">Commands</a></li>
+        <li><a href="#try-it">Try it</a></li>
+        <li><a href="#check-your-setup">Check your setup</a></li>
+        <li><a href="#schedule">Schedule</a></li>
+        <li><a href="#the-agent">The Agent</a></li>
+        <li><a href="#reports-and-exports">Reports and exports</a></li>
+        <li><a href="#coming-from-a-spreadsheet">Coming from a spreadsheet</a></li>
+        <li><a href="#more-in-the-setup-guide">More in the setup guide</a></li>
+      </ul>
+    </li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li>
+      <a href="#contributing">Contributing</a>
+      <ul>
+        <li><a href="#development">Development</a></li>
+        <li><a href="#top-contributors">Top contributors</a></li>
+      </ul>
+    </li>
+    <li><a href="#license">License</a></li>
+    <li><a href="#contact">Contact</a></li>
+    <li><a href="#acknowledgments">Acknowledgments</a></li>
+  </ol>
+</details>
+
+
+
+<!-- ABOUT THE PROJECT -->
+## About The Project
 
 A self-hosted hackathon tracker. An AI agent running on your own machine finds hackathons that fit where you live and what you care about, tracks application deadlines, and texts you when something new or travel-funded appears.
-
-**Personal use only.** hackathon-radar reads public hackathon listings whose terms vary by Source. Respect those terms and do not redistribute collected data ([ADR 0001](docs/adr/0001-self-hosted-only.md)).
 
 ![hackathon-radar setting up a Profile in Brussels, importing a few hackathons in Europe and the US, and listing the ones that fit](demo/demo.gif)
 
 The demo runs offline, on the made-up hackathons in [`demo/hackathons.csv`](demo/hackathons.csv). [`demo/demo.tape`](demo/demo.tape) records it with [VHS](https://github.com/charmbracelet/vhs) and says how to render it again.
 
-## Quick start
-
-Install the archive for your platform from [GitHub Releases](https://github.com/edouard38000/hackathon-radar/releases), keeping its `sidecar/` folder next to the binary, or install from crates.io with `cargo install hackathon-radar --locked` (Rust 1.88 or later). Neither is published yet; until the first release, build from a checkout with `cargo install --path . --locked`. Then open this repo in Claude Code or Codex and say **"set me up"**: [Set up](#set-up) explains the setup skill. Claude Code is recommended; the Codex adapter for Runs requires an experimental opt-in.
-
-See the [setup guide](docs/setup-guide.md) for install details, costs, Photon caveats, updating and uninstalling.
-
 > **Status:** early development. Runs read the global Sources (Devpost, MLH, ETHGlobal, the CASSINI Hackathons, dev.events), the Source pack for your Home (Europe or North America) and your own ICS calendars, merge Duplicate listings, and send Alerts by iMessage through Photon, or through ntfy.
 
-## Principles
+### Principles
 
 - **Self-hosted only.** Everything runs and stays on your machine. There is no hosted service.
 - **Bring your own agent and messaging.** You run your own AI agent, and Alerts come through your own Photon project (iMessage) or ntfy topic.
 - **Personal use only.** It reads public hackathon listings for your own tracking. Respect each Source's terms of use and do not redistribute collected data.
 - **Rust first** wherever the platform allows.
 
-## Commands
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+### Built With
+
+* [![Rust][Rust-badge]][Rust-url] The CLI, in Rust 1.88 or later.
+* [![SQLite][SQLite-badge]][SQLite-url] The local database, through [rusqlite](https://github.com/rusqlite/rusqlite).
+* [![clap][clap-badge]][clap-url] The command line.
+* [![Claude Code][Claude-badge]][Claude-url] Your own coding Agent judges the listings: Claude Code by default, Codex (experimental), or any other agent through a command template.
+* [![Photon][Photon-badge]][Photon-url] iMessage Alerts, through a small Node.js sidecar.
+* [![ntfy][ntfy-badge]][ntfy-url] Push Alerts, with no account needed.
+* [![SerpApi][SerpApi-badge]][SerpApi-url] Flight Fares from Google Flights, on your own key.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- GETTING STARTED -->
+## Getting Started
+
+hackathon-radar runs on your own macOS or Linux machine. The quickest way in is to let your coding agent set it up for you.
+
+### Prerequisites
+
+* **The binary:** a [release archive](https://github.com/edouard38000/hackathon-radar/releases) (no Rust needed), or Rust 1.88 or later to build it with cargo.
+* **An Agent:** [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with `claude` on your `PATH` and signed in (run `claude` once yourself). Codex works too, behind an experimental opt-in, or any other coding agent through a command template; see [The Agent](#the-agent).
+* **For Photon (iMessage) Alerts only:** [Node.js](https://nodejs.org) 20.18.1 or later. ntfy needs no Node.
+
+### Installation
+
+**Quick start:** open this repo in Claude Code and say **"set me up"**.
+
+1. Clone the repo
+   ```sh
+   git clone https://github.com/edouard38000/hackathon-radar.git
+   cd hackathon-radar
+   ```
+2. Open it in Claude Code (or Codex) and say **"set me up"**.
+
+Open this repo in Claude Code (or Codex) and say "set me up". Your coding agent then follows the setup skill in [`.claude/skills/setup-hackathon-radar/SKILL.md`](.claude/skills/setup-hackathon-radar/SKILL.md): it checks what you have installed, installs a release binary or uses `cargo install`, asks you about your Home, Countries, budget, Themes, Agent and Alert channel, runs `hackathon-radar init` and `hackathon-radar doctor` for you, explains anything that needs fixing, and finishes once a test Alert has reached your phone. It never asks for your keys in the chat: you type them into `init`'s hidden prompts in your own terminal, and they go to your keychain. Claude Code picks the skill up on its own; Codex and other agents are pointed at it by [`AGENTS.md`](AGENTS.md). Claude Code is recommended; the Codex adapter for Runs requires an experimental opt-in.
+
+#### Installing the binary yourself
+
+Install the archive for your platform from [GitHub Releases](https://github.com/edouard38000/hackathon-radar/releases), keeping its `sidecar/` folder next to the binary, or install from crates.io with `cargo install hackathon-radar --locked` (Rust 1.88 or later). Neither is published yet; until the first release, build from a checkout with `cargo install --path . --locked`.
+
+```sh
+cargo install hackathon-radar --locked   # from crates.io, once it is published
+cargo install --path . --locked          # from this checkout
+```
+
+See the [setup guide](docs/setup-guide.md) for install details, costs, Photon caveats, updating and uninstalling.
+
+#### Setting up by hand
+
+Without a coding agent, install the binary (`cargo install --path . --locked` from this checkout) and run:
+
+```sh
+hackathon-radar init
+```
+
+`init` asks about your Home, Countries, budget, Themes, Eligibility, Agent, keys and Alert channel, writes your Profile at `~/.config/hackathon-radar/profile.toml`, sends a test Alert and offers to install the [schedule](#schedule). `hackathon-radar test-alert` sends one short Alert through your Alert channel at any time and says whether it was sent. The setup guide covers [every question `init` asks](docs/setup-guide.md#setting-up-by-hand), [where your keys and tokens go](docs/setup-guide.md#your-keys-and-tokens) and [driving `init` with flags](docs/setup-guide.md#setting-up-without-questions).
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- USAGE EXAMPLES -->
+## Usage
+
+### Commands
 
 <!-- Generated by mdsh from the binary's own help; run `mdsh` to update it. tests/readme.rs fails when it is out of date. -->
 <!-- `$ cargo run --quiet -- --help` -->
@@ -50,77 +198,7 @@ Options:
 
 `hackathon-radar <command> --help` lists each command's flags.
 
-## Set up
-
-Open this repo in Claude Code (or Codex) and say "set me up". Your coding agent then follows the setup skill in [`.claude/skills/setup-hackathon-radar/SKILL.md`](.claude/skills/setup-hackathon-radar/SKILL.md): it checks what you have installed, installs a release binary or uses `cargo install`, asks you about your Home, Countries, budget, Themes, Agent and Alert channel, runs `hackathon-radar init` and `hackathon-radar doctor` for you, explains anything that needs fixing, and finishes once a test Alert has reached your phone. It never asks for your keys in the chat: you type them into `init`'s hidden prompts in your own terminal, and they go to your keychain. Claude Code picks the skill up on its own; Codex and other agents are pointed at it by [`AGENTS.md`](AGENTS.md).
-
-### Setting up by hand
-
-Without a coding agent, install the binary (`cargo install --path . --locked` from this checkout) and run:
-
-```sh
-hackathon-radar init
-```
-
-`init` walks you through everything once: your Home city (it suggests the airports near it), the Countries or regions you'll travel to, your Train limit, your Flight budget in your currency (taken from Home's country), the Travel-funded rule (on by default: a Travel-funded Hackathon then counts anywhere in the world), your Themes and Eligibility, your Agent (it looks for `claude` and `codex` on your `PATH`), an optional [SerpApi](#fares-and-the-flight-budget) key, and your Alert channel ([Photon](#photon-imessage-alerts) or ntfy), then sends a test Alert and offers to install the [schedule](#schedule). It writes a complete Profile at `~/.config/hackathon-radar/profile.toml`. Run it again to change anything: it shows your current values as defaults, changes only what you answer differently, and keeps your own comments and any section it doesn't ask about.
-
-`hackathon-radar test-alert` sends one short Alert through your Alert channel at any time and says whether it was sent.
-
-### Your keys and tokens
-
-Your Profile holds no secrets, so it is safe to share. `init` stores your keys in your operating system's keychain (the macOS Keychain, or the Secret Service on Linux) under the service `hackathon-radar`. On a machine with no keychain, such as a headless Linux server, they go to `~/.config/hackathon-radar/secrets.toml` instead, readable only by you; hackathon-radar refuses to read that file if anyone else can. Scheduled Runs read them from there, so they work without your shell's environment.
-
-| Secret | Keychain account | Environment variable |
-| --- | --- | --- |
-| Photon project ID | `photon-project-id` | `PHOTON_PROJECT_ID` |
-| Photon project secret | `photon-project-secret` | `PHOTON_PROJECT_SECRET` |
-| SerpApi key | `serpapi-api-key` | `SERPAPI_API_KEY` |
-| ntfy access token | `ntfy-token` | `HACKATHON_RADAR_NTFY_TOKEN` |
-
-Each one is read from its environment variable first, when it is set (for CI, or to try a key out), then the keychain, then the file. hackathon-radar never prints a secret. Your Anthropic key isn't one of them: Claude Code runs on your own `claude` sign-in (see [The Agent](#the-agent)).
-
-### Setting up without questions
-
-Coding agents (and scripts) drive `init` with flags: each one answers its question, and `--yes` answers every other question with its default, which is the value your Profile already has. Answers that have no default (a new Profile's Home city, for example) are listed together, and nothing is written until they're all given. Lists are comma-separated, and `none` clears an optional value.
-
-```sh
-printf '%s\n' "$SERPAPI_KEY" | hackathon-radar init --yes \
-  --home-city Brussels --countries "Belgium, France, Schengen" \
-  --flight-budget 200 --themes "AI agents, climate" \
-  --agent claude-code --serpapi-key-stdin \
-  --alert-channel ntfy --ntfy-topic hackathon-radar-k3f9q2m8x1zt
-```
-
-| Flag | Answers |
-| --- | --- |
-| `--yes` | Ask nothing; keep current values and take defaults; list what's missing |
-| `--profile <PATH>`, `--db <PATH>` | Where the Profile and the database are |
-| `--home-city <CITY>` | Home's city |
-| `--home-country <COUNTRY>` | Home's country, or `none` (default: from the city) |
-| `--airports <CODES>` | The airports you fly out of (default: the ones near Home, for the cities init knows) |
-| `--countries <LIST>` | Countries, US states or regions (default: Home's country) |
-| `--currency <CODE>` | Your currency (default: Home country's) |
-| `--train-limit <HOURS>` | The Train limit (default: 4) |
-| `--flight-budget <AMOUNT>` | The Flight budget, or `none` |
-| `--travel-funded-anywhere <true\|false>` | The Travel-funded rule (default: true for a new Profile) |
-| `--themes <LIST>` | Your Themes, or `none` |
-| `--student <true\|false\|none>`, `--nationalities <LIST>`, `--age <AGE>` | Your Eligibility |
-| `--agent <claude-code\|codex\|command>` | Your Agent (default: claude-code) |
-| `--experimental` | Opts in to the experimental Codex adapter |
-| `--agent-command <COMMAND>` | The command template for `--agent command`, split on spaces |
-| `--serpapi-key-stdin` | Reads your SerpApi key from stdin |
-| `--alert-channel <photon\|ntfy\|none>` | Your Alert channel |
-| `--photon-to <NUMBER>` | Your number for Photon, in E.164 format |
-| `--photon-credentials-stdin` | Reads your Photon project ID, then its secret, from stdin |
-| `--skip-npm-ci` | Doesn't install the Photon sidecar's dependencies |
-| `--ntfy-topic <TOPIC>`, `--ntfy-server <URL>` | Your ntfy topic and server (default: https://ntfy.sh) |
-| `--ntfy-token-stdin` | Reads an ntfy access token from stdin |
-| `--test-alert <true\|false>` | Whether to send a test Alert (default: true) |
-| `--install-schedule <true\|false>` | Whether to install the schedule (default: false with `--yes`) |
-
-Secrets never come from a flag, so they don't end up in your shell history: pipe them on stdin, one per line, in this order: the SerpApi key, the ntfy token, the Photon project ID, the Photon project secret (only those whose `--…-stdin` flag you pass). `init` exits non-zero if the test Alert or the schedule install fails, after saying why; the Profile is saved either way.
-
-## Try it
+### Try it
 
 `hackathon-radar run --dry-run` reads the Sources (the global ones, [Devpost](https://devpost.com), [MLH](https://www.mlh.com), [ETHGlobal](https://ethglobal.com/events), the [CASSINI Hackathons](https://www.cassini.eu/hackathons/) and [dev.events](https://dev.events); the Source pack Home's country picks, Europe with [hackathon.be](https://hackathon.be), [hackathonhub.eu](https://hackathonhub.eu) and two Luma calendars, or North America with Luma's San Francisco, New York and Boston calendars; any packs you add; and any ICS calendars you add under `[sources]` in your Profile), merges listings of the same Hackathon from different Sources, keeps the listings that haven't ended and are in your Profile's Countries (which can name regions such as `"Schengen"`, `"European Union"`, `"North America"` or `"US West Coast"`), asks your Agent (Claude Code, Codex or another coding agent) which of them are real Hackathons you're eligible for and which are Travel-funded, stores the results in a local SQLite database, and prints the Alert it would send. A dry run sends nothing and marks nothing as Announced.
 
@@ -128,35 +206,13 @@ Secrets never come from a flag, so they don't end up in your shell history: pipe
 cargo run -- run --dry-run --profile examples/profile.toml
 ```
 
-Without `--dry-run`, the Alert goes to the Alert channel in your Profile: an iMessage from your own [Photon](#photon-imessage-alerts) line, or a push through [ntfy](https://ntfy.sh). For ntfy, which needs no account, install the ntfy app, subscribe to a hard-to-guess topic, and uncomment the `[alert_channel]` section of the example Profile with that topic. Your first Alert is a Welcome Alert listing the first 6 Hackathons that already Fit; when more Fit, it counts the rest and they are Announced too, and `hackathon-radar report` shows them all (see [Reports and exports](#reports-and-exports)). Later Runs only tell you about Hackathons that newly Fit, each one once, about known ones that newly became Travel-funded, and give a Deadline reminder 3 days before an open Hackathon that Fits closes applications; Travel-funded ones come first, at most 6 per Alert (the rest come in the next one), and nothing is sent when nothing is new. Each entry shows the dates and city, the trip or travel funding, the application status and deadline, and the link. Each Run also has your Agent recheck the deadline, status and travel funding of a few known Hackathons (see `[deadlines]` in the example Profile), including, less often, closed ones that could still reopen (deadline unknown or not passed, not started yet); one that reopens is announced then. If your ntfy server needs an access token, `init` stores it in your keychain; it never goes in the Profile. With no Alert channel set, the Alert is printed instead and nothing is marked as Announced.
+Without `--dry-run`, the Alert goes to the Alert channel in your Profile: an iMessage from your own [Photon](docs/setup-guide.md#photon-imessage-alerts) line, or a push through [ntfy](https://ntfy.sh). For ntfy, which needs no account, install the ntfy app, subscribe to a hard-to-guess topic, and uncomment the `[alert_channel]` section of the example Profile with that topic. Your first Alert is a Welcome Alert listing the first 6 Hackathons that already Fit; when more Fit, it counts the rest and they are Announced too, and `hackathon-radar report` shows them all (see [Reports and exports](#reports-and-exports)). Later Runs only tell you about Hackathons that newly Fit, each one once, about known ones that newly became Travel-funded, and give a Deadline reminder 3 days before an open Hackathon that Fits closes applications; Travel-funded ones come first, at most 6 per Alert (the rest come in the next one), and nothing is sent when nothing is new. Each entry shows the dates and city, the trip or travel funding, the application status and deadline, and the link. Each Run also has your Agent recheck the deadline, status and travel funding of a few known Hackathons (see `[deadlines]` in the example Profile), including, less often, closed ones that could still reopen (deadline unknown or not passed, not started yet); one that reopens is announced then. If your ntfy server needs an access token, `init` stores it in your keychain; it never goes in the Profile. With no Alert channel set, the Alert is printed instead and nothing is marked as Announced.
 
 Your Profile is a small TOML file with your Home, Countries, currency, Themes, Eligibility, Agent and Alert channel, which `init` writes for you; see [`examples/profile.toml`](examples/profile.toml) for every setting. By default it is read from `~/.config/hackathon-radar/profile.toml` and the database lives at `~/.local/share/hackathon-radar/hackathon-radar.sqlite` (both honour `XDG_CONFIG_HOME` and `XDG_DATA_HOME`). Pass `--profile` and `--db` to use other paths.
 
-### Photon (iMessage) Alerts
+How each Hackathon that Fits is labelled with the trip from Home, and how Fares are checked against your Flight budget, are in the setup guide's [Getting there](docs/setup-guide.md#getting-there) and [Fares and the Flight budget](docs/setup-guide.md#fares-and-the-flight-budget).
 
-[Photon](https://photon.codes) is a hosted iMessage API with a free tier. Its messages come from Photon's own line, so they notify you like any text (an iMessage from your own Apple ID to yourself wouldn't). `init` walks you through it and does steps 3 and 4 for you; by hand, it is:
-
-1. Sign up at [app.photon.codes](https://app.photon.codes), create a project and turn on iMessage (Spectrum). Note the project's ID and secret, and the iMessage line Photon gives you.
-2. **Text your Photon line once from your phone**, with anything. A shared (free-tier) line can only message a number that has texted it first; until you do, sends fail with "Photon won't message … yet".
-3. Install [Node.js](https://nodejs.org) 20.18.1 or later. After selecting Photon in `init`, run `hackathon-radar doctor --offline`: its `alert.photon.sidecar` and `alert.photon.dependencies` checks name the resolved directory. Install the sidecar's pinned dependencies there once (replace the example path with that directory):
-
-   ```sh
-   cd "/path/reported/by/doctor" && npm ci
-   ```
-
-4. Put your number in the Profile (E.164 format, or a Photon space ID), and store your project's ID and secret in your keychain with `hackathon-radar init` (or set `PHOTON_PROJECT_ID` and `PHOTON_PROJECT_SECRET` in the environment). They never go in the Profile.
-
-   ```toml
-   [alert_channel]
-   kind = "photon"
-   to = "+32470123456"
-   ```
-
-Then `hackathon-radar test-alert` checks that an Alert reaches you.
-
-**Why there's some Node here.** Everything in hackathon-radar is Rust except [`sidecar/photon/`](sidecar/photon/), because Photon only ships a TypeScript SDK ([ADR 0005](docs/adr/0005-photon-node-sidecar.md)). For each Alert, the CLI runs `node` with `send.mjs` in the resolved sidecar directory, with your number and the Alert text as JSON on stdin and the two credentials in its environment; the sidecar sends one message with the SDK, prints one line of JSON and exits. Its dependencies are pinned in `package-lock.json`, and their install scripts are turned off. A non-empty `HACKATHON_RADAR_PHOTON_SIDECAR_DIR` always overrides automatic lookup, even if the sidecar is missing; see the [setup guide](docs/setup-guide.md#photon-and-ntfy) for the full lookup order. With `cargo install` from crates.io, keep that packaged source copy available and run `npm ci` in the directory `doctor` names.
-
-## Check your setup
+### Check your setup
 
 ```sh
 hackathon-radar doctor                    # pass --profile and --db as for `run`
@@ -165,45 +221,9 @@ hackathon-radar doctor --send-test-alert  # also send one test Alert
 hackathon-radar doctor --json             # machine-readable, for the setup skill
 ```
 
-`doctor` checks everything a Run depends on and says plainly what's wrong and how to fix it. Each check prints `pass`, `warn` or `fail` (or `skip`), a one-line reason and, when there is something to do, a one-line fix:
+`doctor` checks everything a Run depends on and says plainly what's wrong and how to fix it. Each check prints `pass`, `warn` or `fail` (or `skip`), a one-line reason and, when there is something to do, a one-line fix. `doctor` exits 0 when nothing failed (warnings are fine) and 1 when a check failed. The setup guide lists [what each check looks at, and the `--json` output](docs/setup-guide.md#what-doctor-checks).
 
-- **Profile**: it is there, parses and is valid, with every problem listed.
-- **Secrets**: each secret your Profile needs (the Photon credentials, the ntfy token if you set one, the SerpApi key when you have a Flight budget) can be read, and from where: an environment variable, the keychain or the secrets file. Never its value. On macOS it reads the Keychain with prompts turned off, so an item a scheduled Run couldn't read (after a rebuild changed the binary the item trusts, macOS asks for approval, and a scheduled Run can't answer) fails here, with the fix: run `hackathon-radar init` again and choose Always Allow. A locked or missing keyring, which Runs quietly fall back from, is a warning, and the fallback file must be readable only by you. A custom `XDG_CONFIG_HOME` is a warning too, since scheduled Runs don't see it.
-- **Agent**: its program is on your `PATH`; Claude Code is signed in (`claude auth status`, which costs nothing); Codex has its experimental opt-in. No Agent is ever asked to judge anything.
-- **Alert channel**: ntfy's topic is set and its server answers; for Photon, Node.js 20.18.1 or later, the sidecar and its `node_modules` (else run `npm ci` in the resolved directory the check names), and a reminder to text your Photon line once. With `--send-test-alert`, one test Alert goes out as `test-alert` sends it; without it, nothing is sent.
-- **Schedule**: installed or not, and whether it starts this binary, with the same Profile and database, and a `PATH` that finds your Agent's program (and `node` for Photon). On Linux, whether linger is on.
-- **Sources**: one light, polite request to each Source a Run reads. A Source that doesn't answer is a warning, since sites go down for a while.
-- **Last Run**: when it ran, whether it succeeded and why not. If it is older than twice the longest gap in your schedule, scheduled Runs may not be firing (the Mac was off at Run time, or the schedule isn't loaded).
-
-`doctor` exits 0 when nothing failed (warnings are fine) and 1 when a check failed. `--json` prints the same results on stdout, in a shape that only changes with its `version`:
-
-```json
-{
-  "version": 1,
-  "ok": false,
-  "counts": { "pass": 23, "warn": 2, "fail": 1, "skip": 0 },
-  "checks": [
-    {
-      "id": "alert.photon.node",
-      "section": "alert-channel",
-      "name": "Node.js",
-      "status": "fail",
-      "reason": "Node.js 20.11.0 at /opt/homebrew/bin/node is older than 20.18.1, which the Photon sidecar needs.",
-      "fix": "Install Node.js 20.18.1 or later from https://nodejs.org; if Runs are scheduled, run `hackathon-radar schedule install` again afterwards.",
-      "details": []
-    }
-  ]
-}
-```
-
-- `ok` is false exactly when a check has `"status": "fail"`, which is also when the exit code is 1.
-- `counts` counts the checks by status.
-- Each check has a stable `id` (such as `profile`, `secrets.photon-project-secret`, `agent.sign-in`, `alert.ntfy.server`, `schedule.path`, `source.devpost`, `last-run.age`), its `section` (`profile`, `secrets`, `agent`, `alert-channel`, `schedule`, `sources`, `last-run`), a `name` for people, its `status` (`pass`, `warn`, `fail` or `skip`), a one-line `reason`, a one-line `fix` or `null`, and `details`: more lines when one isn't enough, such as each problem in the Profile.
-- Checks appear in the order above; which ones appear depends on the Profile (a Photon check only for Photon, a `schedule.linger` check only on Linux), and when the Profile doesn't load, the Agent, Alert channel and Sources sections are one `skip` each.
-
-Limits: the Keychain check reads as this binary, so if the schedule starts a different binary (`schedule.binary` says so), a prompt that binary would meet isn't seen. The private URLs of your own calendars stay out of the output; only their host is shown.
-
-## Schedule
+### Schedule
 
 `hackathon-radar schedule install` runs a Run for you every Monday and Thursday at 08:00 local time, or on the days and time in your Profile's optional `[schedule]` section (see [`examples/profile.toml`](examples/profile.toml)). On macOS it installs a launchd agent in `~/Library/LaunchAgents`; on Linux, a systemd user timer in `~/.config/systemd/user`. Each Run appends its output to `~/.local/state/hackathon-radar/run.log` (honouring `XDG_STATE_HOME`).
 
@@ -227,7 +247,7 @@ Each Run sends the listings that passed the Profile's rules to your Agent, chose
 claude -p --permission-mode dontAsk --tools WebSearch,WebFetch --allowedTools WebSearch,WebFetch --strict-mcp-config --setting-sources "" --max-turns <cap> --output-format json --json-schema <schema>
 ```
 
-It loads none of your Claude Code settings, hooks or MCP servers, so nothing you've allowed for your own work applies to it. Every Agent request has its own step cap. A Run sends up to `agent.judging_requests_per_run` judging requests (3 by default), one after another, each of at most 20 listings and each capped by `agent.max_turns` (50 by default); it stops early once nothing waits, or after a request fails, and the rest wait for the next Run. Travel estimates (see Getting there) are capped by `agent.travel_max_turns` (15 by default). More judging requests keep up with more listings but use more of your subscription; at the defaults, two Runs a week judge up to 120 listings.
+It loads none of your Claude Code settings, hooks or MCP servers, so nothing you've allowed for your own work applies to it. Every Agent request has its own step cap. A Run sends up to `agent.judging_requests_per_run` judging requests (3 by default), one after another, each of at most 20 listings and each capped by `agent.max_turns` (50 by default); it stops early once nothing waits, or after a request fails, and the rest wait for the next Run. Travel estimates (see [Getting there](docs/setup-guide.md#getting-there)) are capped by `agent.travel_max_turns` (15 by default). More judging requests keep up with more listings but use more of your subscription; at the defaults, two Runs a week judge up to 120 listings.
 
 **Codex** (`adapter = "codex"`, experimental) runs headless on your own `codex` login (or `CODEX_API_KEY`, if you set it). If `codex` isn't signed in, run `codex login` once yourself.
 
@@ -268,21 +288,7 @@ The agent must print only the JSON answer on stdout and exit with code 0; anythi
 
 **A generic agent must be read-only, and that is up to you.** hackathon-radar can't see inside another agent, so your command must give it web search and page reading and nothing else: no shell, no file writes, no MCP servers or other tools, and no flag that skips permissions or makes its sandbox writable. It reads arbitrary web pages on every Run, unattended, and must not be able to act on anything it reads there. hackathon-radar rejects any answer that doesn't match the schema, but it can't stop an agent you've given more power from using it.
 
-### Getting there
-
-Each Hackathon that Fits is labelled with how you'd get there from Home: `local` (in your Home city, or in Home's country within the Train limit), by train within the Train limit (`train ~2h`), or by flight to its nearest served airport (`fly BRU→MUC`). The label is stored and shown in the Alert entry. The Train limit is `travel.train_limit_hours` in your Profile (4 by default).
-
-The Agent estimates the fastest train journey from Home and the nearest airport with flights from your Home airports once per destination city, in a second, smaller request with its own built-in prompt and schema, run with the same read-only command line and, for Agents that take a step cap, capped by `agent.travel_max_turns` (15 steps by default). The answers are cached per Home city and destination city, so later Runs never ask about a city again; a malformed answer is rejected and its cities are asked about on the next Run. If an estimate is wrong, add a `[[travel.overrides]]` entry for that city (see [`examples/profile.toml`](examples/profile.toml)); overrides always win over the cache.
-
-### Fares and the Flight budget
-
-Set `travel.flight_budget` in your Profile (the most you'd pay for a return flight, in your Profile's `currency`, by default that of Home's country, or EUR) and each flight within your Countries is checked against it: it Fits only when its Fare, the cheapest return economy flight for one adult from any of your Home airports, leaving the day before the Hackathon starts and coming back the day after it ends, is at or under the budget. Under the Travel-funded rule (`travel.travel_funded_anywhere = true`), a Travel-funded Hackathon skips the budget, as it skips Countries; without the rule, its flight is checked against the budget like any other. The Alert entry shows the Fare after the trip, `fly BRU→MUC · ~€185`, `fly BRU→MUC · ~€96 from CRL` when another Home airport is cheaper, or `fly BRU→MUC · ~€185 (unverified)`; a Travel-funded entry shows its funding instead. A flight starting further away than `fares.horizon_weeks` (10) isn't held back: it Fits and is announced with `fare checked closer to the date`, so its application deadline can't pass while it waits, and the budget decides it once it is inside the horizon. If it then turns out over budget, it simply isn't announced again; no retraction is sent. Inside the horizon, a flight that has no Fare yet (the per-Run cap was reached, or the lookup failed) is held back from Alerts, Deadline reminders included, not dropped, until it has one, usually a Run or two later. Devpost listings give a submission period rather than the event's days, so they get no Fare and the budget leaves them unchecked. Without a Flight budget, Fares aren't looked up and flights stay in scope.
-
-Fares come from Google Flights through [SerpApi](https://serpapi.com/google-flights-api), on your own key, which `init` stores in your keychain (it is never stored in the Profile and never printed; `SERPAPI_API_KEY` in the environment overrides it). Its free plan allows 250 searches a month, so a Run only looks up Fares for flights to Hackathons that Fit, aren't exempt from the budget by the Travel-funded rule, haven't started and start within `fares.horizon_weeks` (10); keeps each Fare for `fares.refresh_days` (14) before looking it up again; and makes at most `fares.lookups_per_run` lookups (10), soonest Hackathon first. Every Home airport goes into one search, so each Fare costs one search. At the defaults, two Runs a week use at most about 87 searches a month.
-
-Without a key, your Agent estimates the Fares from web search in a separate, smaller read-only request with its own built-in prompt and schema, capped by `agent.fare_max_turns` (10 steps by default), and they are stored and shown as Unverified fares. A malformed answer is rejected and asked again on the next Run. Once you add a key, Unverified fares are replaced by real ones.
-
-## Reports and exports
+### Reports and exports
 
 Beyond Alerts, you can browse what Fits you. Each command reads the local database (never the network), writes to stdout or to `--out <file>`, takes `--profile` and `--db` as for `run`, and with `--all` also lists the Hackathons that don't Fit (saying why) or are closed.
 
@@ -306,7 +312,52 @@ hackathon-radar import-sheet hackathons.csv
 
 Export the Sheet's Hackathons tab as CSV (File > Download > Comma-separated values). Each row keeps its deadline, status, travel funding, Fare and notes. Rows marked `🔔 notified` count as Announced, so you aren't told about them again; rows marked `OUT OF SCOPE` never Fit. A row that matches a Hackathon already stored is merged into it as a Duplicate listing, and importing the same file twice changes nothing. A CSV from `export sheet` imports too.
 
-## Development
+### More in the setup guide
+
+The [setup guide](docs/setup-guide.md) holds the reference detail:
+
+- [Install options](docs/setup-guide.md#install-options), [costs](docs/setup-guide.md#costs) and [Agent options](docs/setup-guide.md#agent-options)
+- [Setting up by hand](docs/setup-guide.md#setting-up-by-hand): every question `init` asks
+- [Your keys and tokens](docs/setup-guide.md#your-keys-and-tokens): the keychain, the secrets file and the environment variables
+- [Setting up without questions](docs/setup-guide.md#setting-up-without-questions): every `init` flag
+- [Getting there](docs/setup-guide.md#getting-there): the trip label, the Train limit and travel overrides
+- [Fares and the Flight budget](docs/setup-guide.md#fares-and-the-flight-budget): SerpApi, Unverified fares and the Fare horizon
+- [Photon (iMessage) Alerts](docs/setup-guide.md#photon-imessage-alerts), and [why there's some Node here](docs/setup-guide.md#why-theres-some-node-here)
+- [What doctor checks](docs/setup-guide.md#what-doctor-checks), including its `--json` output
+- [Updating and uninstalling](docs/setup-guide.md#updating-and-uninstalling), and [releasing](docs/setup-guide.md#releasing-maintainers) for the maintainer
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- ROADMAP -->
+## Roadmap
+
+- [x] Runs that read the global Sources, your Home's Source pack and your own ICS calendars, merge Duplicate listings, and have your own Agent judge what Fits
+- [x] Alerts by iMessage through Photon, or through ntfy, with a Welcome Alert, Deadline reminders and rechecks of known Hackathons
+- [x] `doctor`, `schedule`, reports, calendar and Sheet exports, and Sheet import
+- [x] The "set me up" setup skill, and a live end-to-end test run before each release
+- [ ] The maintainer's switch-over test from the old personal tracker ([#20][issue-20])
+- [ ] The first release: archives on GitHub Releases and the crate on crates.io ([#20][issue-20])
+
+The [v1 spec (#1)][issue-1] has the whole plan, and what is out of scope for now: a hosted service, Windows, Telegram, email or SMS Alerts, several Profiles on one install, and a web interface. See the [open issues][issues-url] for everything proposed (and known issues).
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- CONTRIBUTING -->
+## Contributing
+
+Contributions are welcome. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md), [`docs/background.md`](docs/background.md) for what the project is and why, and [`GLOSSARY.md`](GLOSSARY.md) for the words it uses (Profile, Run, Candidate, Alert, Announced…). Coding agents follow [`AGENTS.md`](AGENTS.md).
+
+1. Find or open an issue, with the bug report or feature request template. Larger work is written up as a spec issue and split into tickets.
+2. Fork the project and create a branch for that one issue (`git checkout -b 123-short-name`)
+3. Build it Rust first (cargo, clippy, rustfmt), and run the checks in [Development](#development)
+4. Commit your changes (`git commit -m '123: Short description'`) and push the branch (`git push origin 123-short-name`)
+5. Open a pull request: one PR per issue, kept to its acceptance criteria, with `Closes #123` in the description and the pull request template filled in
+
+### Development
 
 ```sh
 cargo fmt --check
@@ -322,7 +373,7 @@ To render the demo again, run `cargo build --release --locked`, then `vhs demo/d
 
 Tests never touch the network or your keychain: Sources read saved fixtures from `tests/fixtures/`, no test runs a real Agent, no test reaches Photon, and secrets go to a fake keychain. The Photon channel's Rust tests and the sidecar's own tests (with a fake Photon SDK) check the same recorded sidecar outputs in `tests/fixtures/photon/`. `tests/setup_skill.rs` keeps the setup skill in step with the CLI: every flag it mentions must exist, every `init` question must have its flag in it, no secret may go on a command line, and its example `init` commands are run against a fake machine.
 
-### The live end-to-end test
+#### The live end-to-end test
 
 `tests/live.rs` is the one test that touches the real world. It is ignored by default, so `cargo test` and CI never run it; the maintainer runs it on purpose before tagging a release (see the setup guide's [Releasing](docs/setup-guide.md#releasing-maintainers) section), on a machine with the network and a signed-in `claude` on the `PATH`:
 
@@ -334,6 +385,81 @@ It drives the built binary with a temporary Profile, database and XDG directorie
 
 Without the network or a signed-in `claude`, it says why and passes as skipped. It refuses to start if a hackathon-radar schedule is already installed, because installing its own would replace yours; a drop guard removes the schedule it installs even when a step fails. On macOS the schedule commands get a temporary `HOME`, so even the plist stays in the temporary directory; on Linux the systemd units go in your own unit directory and are removed again. It never writes to your Profile, data or keychain, and leaves nothing behind but a few ntfy messages on its own topic. Runs still read the keychain as any Run does, so a SerpApi key you stored with `init` is used for Fares. The Agent is your real `claude`, so the test uses some of your Claude usage, and Claude Code keeps its usual session history.
 
+### Top contributors
+
+<a href="https://github.com/edouard38000/hackathon-radar/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=edouard38000/hackathon-radar" alt="contrib.rocks image" />
+</a>
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- LICENSE -->
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- CONTACT -->
+## Contact
+
+Maintainer: [@edouard38000](https://github.com/edouard38000)
+
+Questions, bugs and ideas: [the project's issues][issues-url]. For a security problem, don't open an issue; follow [`SECURITY.md`](SECURITY.md).
+
+Project Link: [https://github.com/edouard38000/hackathon-radar](https://github.com/edouard38000/hackathon-radar)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- ACKNOWLEDGMENTS -->
+## Acknowledgments
+
+* [Best-README-Template](https://github.com/othneildrew/Best-README-Template), which this README follows
+* [Photon](https://photon.codes), for iMessage Alerts
+* [ntfy](https://ntfy.sh), for push Alerts with no account
+* [SerpApi](https://serpapi.com/google-flights-api), for Google Flights Fares
+* [Matt Pocock's skills](https://github.com/mattpocock/skills), the issue, triage and domain-doc workflow this repo was built with
+* The Sources hackathon-radar reads: [Devpost](https://devpost.com), [MLH](https://www.mlh.com), [ETHGlobal](https://ethglobal.com/events), the [CASSINI Hackathons](https://www.cassini.eu/hackathons/), [dev.events](https://dev.events), [hackathon.be](https://hackathon.be), [hackathonhub.eu](https://hackathonhub.eu) and Luma's calendars
+* [VHS](https://github.com/charmbracelet/vhs), which records the demo, and [mdsh](https://github.com/zimbatm/mdsh), which keeps the Commands block current
+* [Shields.io](https://shields.io) and [contrib.rocks](https://contrib.rocks), for the badges and the contributors image
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- MARKDOWN LINKS & IMAGES -->
+<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
+[contributors-shield]: https://img.shields.io/github/contributors/edouard38000/hackathon-radar.svg?style=for-the-badge
+[contributors-url]: https://github.com/edouard38000/hackathon-radar/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/edouard38000/hackathon-radar.svg?style=for-the-badge
+[forks-url]: https://github.com/edouard38000/hackathon-radar/network/members
+[stars-shield]: https://img.shields.io/github/stars/edouard38000/hackathon-radar.svg?style=for-the-badge
+[stars-url]: https://github.com/edouard38000/hackathon-radar/stargazers
+[issues-shield]: https://img.shields.io/github/issues/edouard38000/hackathon-radar.svg?style=for-the-badge
+[issues-url]: https://github.com/edouard38000/hackathon-radar/issues
+[license-shield]: https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg?style=for-the-badge
+[license-url]: #license
+[ci-shield]: https://img.shields.io/github/actions/workflow/status/edouard38000/hackathon-radar/ci.yml?branch=main&style=for-the-badge&label=CI
+[ci-url]: https://github.com/edouard38000/hackathon-radar/actions/workflows/ci.yml
+[issue-1]: https://github.com/edouard38000/hackathon-radar/issues/1
+[issue-20]: https://github.com/edouard38000/hackathon-radar/issues/20
+[Rust-badge]: https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white
+[Rust-url]: https://www.rust-lang.org
+[SQLite-badge]: https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white
+[SQLite-url]: https://www.sqlite.org
+[clap-badge]: https://img.shields.io/badge/clap-4A4A55?style=for-the-badge&logo=rust&logoColor=white
+[clap-url]: https://github.com/clap-rs/clap
+[Claude-badge]: https://img.shields.io/badge/Claude_Code-D97757?style=for-the-badge&logo=claude&logoColor=white
+[Claude-url]: https://docs.anthropic.com/en/docs/claude-code
+[Photon-badge]: https://img.shields.io/badge/Photon_iMessage-34C759?style=for-the-badge&logo=imessage&logoColor=white
+[Photon-url]: https://photon.codes
+[ntfy-badge]: https://img.shields.io/badge/ntfy-317F6F?style=for-the-badge&logo=ntfy&logoColor=white
+[ntfy-url]: https://ntfy.sh
+[SerpApi-badge]: https://img.shields.io/badge/SerpApi-3B5998?style=for-the-badge
+[SerpApi-url]: https://serpapi.com
