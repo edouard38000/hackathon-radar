@@ -15,7 +15,7 @@ mdsh --frozen   # the README's generated blocks (cargo install mdsh --locked); n
 (cd sidecar/photon && npm ci && npm test)   # only for changes to the Photon sidecar
 ```
 
-CI runs exactly these on macOS and Linux, and a PR must pass them. Tests never touch the network, a real Agent, Photon or your keychain: Sources read saved fixtures from `tests/fixtures/`, and secrets go to a fake keychain. Keep it that way; a test that needs the network belongs in the live test.
+CI runs exactly these on macOS and Linux, and a PR must pass them. Tests never touch the network, a real Agent, Photon or your keychain: Sources read saved fixtures from `tests/fixtures/`, and secrets go to a fake keychain. The exception is `tests/verify.rs`, which runs the built binary against a server on your own machine, with a shell script as its Agent and placeholder secrets from the environment. Keep it that way; a test that needs the network belongs in the live test.
 
 The live end-to-end test (`tests/live.rs`) is the one exception. It runs the real binary against real Sources, a real `claude` and ntfy.sh, so it is ignored by default and the maintainer runs it before a release. See the README's [Development](README.md#development) section.
 
@@ -40,7 +40,7 @@ Larger work is written up as a spec issue and split into tickets, each a sub-iss
 ## Pull requests
 
 - **One PR per issue.** Keep it to that issue's acceptance criteria, and put `Closes #<issue>` in the description.
-- Fill in the pull request template: what changed, the acceptance criteria, how you tested it, and anything you couldn't do.
+- Fill in the pull request template: what changed, the acceptance criteria, your evidence that it works, the risk, how to revert it, and anything you couldn't do.
 - Don't edit existing database migrations or weaken existing tests; add a new migration or a new test instead.
 - Never commit secrets (API keys, tokens, Photon credentials, your phone number). Profiles hold no secrets by design; keys go to the keychain.
 - An Agent may only search and read the web ([ADR 0004](docs/adr/0004-agent-is-read-only.md)). A change that gives it any other tool, or loosens its flags, needs a new ADR first.
