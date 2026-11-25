@@ -1,8 +1,10 @@
+<!-- What changed, Evidence, Risk and How to revert come from edouard38000/review-loop templates/pull_request_template.md. The reviewer grades a missing or empty section Should fix. -->
+
 Closes #
 
 ## What changed
 
-<!-- What this PR does, in the GLOSSARY.md terms (Profile, Run, Candidate, Alert…). One PR per issue. -->
+<!-- What this PR does, in the GLOSSARY.md terms (Profile, Run, Candidate, Alert…), and the ticket it closes. One PR per issue. -->
 
 ## Acceptance criteria
 
@@ -10,14 +12,22 @@ Closes #
 
 - [ ]
 
-## Tests
+## Evidence
+
+<!-- What you ran to try the change for real, and what you saw: a screenshot, command output or test log. "Tested locally" alone counts as empty. Paste the block the verify skill prints (`cargo test --locked --test verify -- --nocapture`), and list new or changed tests. Tests never touch the network; only the ignored live test (tests/live.rs) does. -->
 
 - [ ] `cargo fmt --check`
 - [ ] `cargo clippy --all-targets --locked -- -D warnings`
 - [ ] `cargo test --locked`
 - [ ] `(cd sidecar/photon && npm ci && npm test)`, if the Photon sidecar changed
 
-<!-- New or changed tests, and how you checked the change by hand. Tests never touch the network; only the ignored live test (tests/live.rs) does. -->
+## Risk
+
+<!-- The protected paths this touches (workflows, CLAUDE.md, AGENTS.md, .claude/, this template, the repo's high-risk code), or "none". -->
+
+## How to revert
+
+<!-- How to undo it: "revert this commit", plus any data, migration or deploy step a revert misses. -->
 
 ## Checklist
 

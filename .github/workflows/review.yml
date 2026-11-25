@@ -1,0 +1,22 @@
+# The review loop (edouard38000/review-loop), pinned at v6. Copied from the
+# header comment of review-loop's .github/workflows/review.yml. This repo is
+# public, so every job stays on the default GitHub-hosted runner
+# (ubuntu-latest): never pass the `runner` input (tests/release_workflow.rs).
+name: Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+jobs:
+  review:
+    uses: edouard38000/review-loop/.github/workflows/review.yml@v6
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      # The Agent's instructions under src/ are Markdown but ship in the binary
+      # (ADR 0006), so only the project's documents count as docs-only.
+      docs_globs: 'docs/**,README.md,CONTRIBUTING.md,SECURITY.md,GLOSSARY.md'
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

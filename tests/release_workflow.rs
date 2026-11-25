@@ -198,6 +198,11 @@ fn no_workflow_uses_a_self_hosted_runner() {
         let workflow: Value = serde_norway::from_str(&text).unwrap();
         for (name, job) in workflow["jobs"].as_mapping().unwrap() {
             let name = name.as_str().unwrap();
+            // A job that calls a reusable workflow has no `runs-on`.
+            if !job["uses"].is_null() {
+                assert_review_loop_call(job);
+                continue;
+            }
             for runner in hosted_runner_labels(job) {
                 assert!(
                     ["ubuntu-", "macos-", "windows-"]
@@ -213,6 +218,45 @@ fn no_workflow_uses_a_self_hosted_runner() {
         checked >= 2,
         "expected ci.yml and release.yml in {}",
         dir.display()
+    );
+}
+
+/// The called workflow picks the runner, so only the review loop's may be
+/// called, at a version tag, and without its `runner` input, which leaves its
+/// default, ubuntu-latest.
+fn assert_review_loop_call(job: &Value) {
+    let called = job["uses"].as_str().unwrap();
+    let version = called.strip_prefix("edouard38000/review-loop/.github/workflows/review.yml@v");
+    assert!(
+        version.is_some_and(|v| !v.is_empty() && v.chars().all(|c| c.is_ascii_digit())),
+        "only review-loop's review.yml at a version tag may be called, not {called}"
+    );
+    assert!(
+        job["with"]["runner"].is_null(),
+        "{called} must not be given a runner: this public repo keeps its default"
+    );
+}
+
+#[test]
+#[should_panic(expected = "must not be given a runner")]
+fn a_review_loop_call_that_picks_a_runner_fails() {
+    assert_review_loop_call(
+        &serde_norway::from_str(
+            "uses: edouard38000/review-loop/.github/workflows/review.yml@v6\n\
+             with:\n  runner: '\"ubuntu-latest\"'\n",
+        )
+        .unwrap(),
+    );
+}
+
+#[test]
+#[should_panic(expected = "at a version tag")]
+fn a_call_to_another_workflow_or_a_branch_fails() {
+    assert_review_loop_call(
+        &serde_norway::from_str(
+            "uses: edouard38000/review-loop/.github/workflows/review.yml@main\n",
+        )
+        .unwrap(),
     );
 }
 
