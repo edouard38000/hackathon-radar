@@ -42,4 +42,4 @@ Use `Verified-by: verify` as your commits' trailer when this passed on the commi
 
 ## Changing this skill
 
-This file is a protected path (`.claude/**`), and so is `tests/verify.rs` (review-loop's protected paths for this repo): a pull request that changes either needs Edouard. When a change adds or alters a user flow, add its step to the harness in the same pull request.
+This file is a protected path (`.claude/**`): a pull request that changes it needs Edouard. The harness, `tests/verify.rs`, counts as one only once the review workflow is pinned at a review-loop release whose rules for this repo list it (v6 does not). When a change adds or alters a user flow, add its step to the harness in the same pull request.
