@@ -1,0 +1,15 @@
+name: Pipeline board
+
+on:
+  issues:
+    types: [opened, reopened]
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+
+permissions: {}
+
+jobs:
+  board:
+    uses: edouard38000/review-loop/.github/workflows/pipeline-board.yml@v7
+    secrets:
+      PIPELINE_PROJECT_TOKEN: ${{ secrets.PIPELINE_PROJECT_TOKEN }}
